@@ -2,7 +2,7 @@ const projects=[
  {title:"Wiki Spy",desc:"A curious little collection of things worth discovering.",cat:"Game",className:"wiki",font:"serif",fg:"#111",href:"#"},
  {title:"Cursor Camp",desc:"A tiny creative game for messing around with your cursor.",cat:"Game",className:"camp",font:"sans",fg:"#111",href:"#"},
  {title:"Sandboxels",desc:"A playful sandbox where everything interacts with everything.",cat:"Sandbox",className:"sandbox",font:"mono",fg:"#fff",href:"#"},
- {title:"Constellation Draw",desc:"Connect points and turn a blank sky into your own constellations.",cat:"Creative",className:"constellation",font:"sans",fg:"#fff",href:"#"},
+ {title:"Manhwa",desc:"Read manhwa and discover new stories.",cat:"Creative",className:"constellation",font:"sans",fg:"#fff",href:"/manwa/"},
  {title:"Size of Life",desc:"Explore a strange journey through the scales of the world.",cat:"Experiment",className:"life",font:"serif",fg:"#111",href:"#"},
  {title:"I'm Not a Robot",desc:"A suspiciously simple test of whether you are, in fact, human.",cat:"Puzzle",className:"robot",font:"bold",fg:"#111",href:"#"},
  {title:"Internet Roadtrip",desc:"Go somewhere. Click around. See what the internet has to offer.",cat:"Adventure",className:"road",font:"bold",fg:"#fff",href:"#"},
