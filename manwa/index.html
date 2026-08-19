@@ -113,8 +113,9 @@ function applyZoom(){
   localStorage.setItem(ZOOM_KEY,String(zoom));
 }
 
-function imagePath(m,c,p){
-  return STORAGE_BASE+encodeURIComponent(m.folder)+"/"+encodeURIComponent(c.folder)+"/"+String(p).padStart(3,"0")+".png";
+const EXTENSIONS=["jpg","jpeg","png","webp"];
+function imagePath(m,c,p,ext=EXTENSIONS[0]){
+  return STORAGE_BASE+encodeURIComponent(m.folder)+"/"+encodeURIComponent(c.folder)+"/"+String(p).padStart(3,"0")+"."+ext;
 }
 
 function openManga(m){
@@ -134,12 +135,21 @@ function loadChapter(i){
   currentChapter=i;
   const c=current.chapters[i],box=$("pages");
   $("chapterSelect").value=i;box.innerHTML="";
+  const exts=c.ext?[c.ext,...EXTENSIONS.filter(e=>e!==c.ext)]:EXTENSIONS;
   for(let p=1;p<=c.pages;p++){
     const img=document.createElement("img");
     img.className="page";img.loading=p<=2?"eager":"lazy";img.decoding="async";
-    img.src=imagePath(current,c,p);
+    let extIndex=0;
+    img.src=imagePath(current,c,p,exts[extIndex]);
     img.alt=`${c.name} — page ${p}`;
-    img.onerror=()=>img.style.display="none";
+    img.onerror=()=>{
+      extIndex++;
+      if(extIndex<exts.length){
+        img.src=imagePath(current,c,p,exts[extIndex]);
+      }else{
+        img.style.display="none";
+      }
+    };
     box.appendChild(img);
   }
 
