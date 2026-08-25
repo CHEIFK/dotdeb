@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OSHO Hindi Audio Library</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M7 18V7.5a2 2 0 0 1 2.8-1.84l8 3.5A2 2 0 0 1 18 10.99V18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="18" r="2.5" fill="currentColor"/><circle cx="17" cy="18" r="2.5" fill="currentColor"/></svg>
+    </span>OSHO Audio</div>
+    <nav>
+      <button class="nav-item active" data-view="collections">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.7"/></svg>
+        Collections
+      </button>
+      <button class="nav-item" data-view="recent">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2M20 12a8 8 0 1 1-2.34-5.66M20 5v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Recently played
+      </button>
+      <button class="nav-item" data-view="favorites">
+        <svg viewBox="0 0 24 24" fill="none"><path d="m12 19-7-5.2A4.4 4.4 0 0 1 10 6l2 2 2-2a4.4 4.4 0 0 1 5 7.8L12 19Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        Favorites
+      </button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="heading">
+        <button class="back hidden" id="backToCollections" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none"><path d="m15 18-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <h1 id="pageTitle">Hindi Discourses</h1>
+      </div>
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input id="search" type="search" placeholder="Search collections..." autocomplete="off">
+      </label>
+    </header>
+
+    <section class="hero" id="hero">
+      <div class="hero-art"><img id="heroArt" alt=""></div>
+      <div>
+        <div class="eyebrow">Archive.org · OSHO WORLD · Hindi</div>
+        <h2 id="heroTitle">Hindi Discourses</h2>
+        <p id="heroText">Browse the library by discourse collection. Open a collection to see its audio playlist.</p>
+        <div class="hero-actions">
+          <button class="primary" id="heroPlay">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.53.85l9.5-6.5a1 1 0 0 0 0-1.7l-9.5-6.5A1 1 0 0 0 8 5.5Z"/></svg>
+            Play
+          </button>
+          <button class="icon-action" id="heroFavorite" aria-label="Favorite collection">
+            <svg viewBox="0 0 24 24" fill="none"><path d="m12 19-7-5.2A4.4 4.4 0 0 1 10 6l2 2 2-2a4.4 4.4 0 0 1 5 7.8L12 19Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <div class="section-head">
+      <h3 id="sectionTitle">Collections</h3>
+      <span class="count" id="count">Loading…</span>
+    </div>
+    <div id="content" class="collection-grid"></div>
+  </main>
+</div>
+
+<div class="player">
+  <div class="progress"><input id="seek" type="range" min="0" max="100" value="0" step=".1" aria-label="Seek"></div>
+  <div class="now">
+    <img id="nowArt" alt="">
+    <div class="now-copy"><div id="nowTitle">Nothing playing</div><div id="nowSub">Choose a discourse</div></div>
+  </div>
+  <div class="controls">
+    <button class="control" id="prev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM18 6.5v11a1 1 0 0 1-1.6.8l-7.4-5.5a1 1 0 0 1 0-1.6l7.4-5.5A1 1 0 0 1 18 6.5Z"/></svg></button>
+    <button class="control main-control" id="toggle" aria-label="Play"><svg id="toggleIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.53.85l9.5-6.5a1 1 0 0 0 0-1.7l-9.5-6.5A1 1 0 0 0 8 5.5Z"/></svg></button>
+    <button class="control" id="next" aria-label="Next"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM6 6.5v11a1 1 0 0 0 1.6.8l7.4-5.5a1 1 0 0 0 0-1.6L7.6 5.7A1 1 0 0 0 6 6.5Z"/></svg></button>
+  </div>
+  <div class="tools">
+    <button class="speed" id="speed">1×</button>
+    <svg viewBox="0 0 24 24" fill="none"><path d="M4 10v4h3l4 3V7l-4 3H4ZM15 9.5a4 4 0 0 1 0 5M18 7a7 7 0 0 1 0 10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+    <input id="volume" class="volume" type="range" min="0" max="1" step=".01" value=".9" aria-label="Volume">
+  </div>
+</div>
+
+<audio id="audio" preload="none"></audio>
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 const projects=[
- {title:"Wiki Spy",desc:"A curious little collection of things worth discovering.",cat:"Game",className:"wiki",font:"serif",fg:"#111",href:"#"},
+ {title:"Osho Talks",desc:"A quiet collection of timeless talks worth discovering.",cat:"Podcasts",className:"wiki",font:"serif",fg:"#111",href:"./osho_talks/"},
  {title:"Cursor Camp",desc:"A tiny creative game for messing around with your cursor.",cat:"Game",className:"camp",font:"sans",fg:"#111",href:"#"},
  {title:"Sandboxels",desc:"A playful sandbox where everything interacts with everything.",cat:"Sandbox",className:"sandbox",font:"mono",fg:"#fff",href:"#"},
  {title:"Manhwa",desc:"Read manhwa and discover new stories.",cat:"Creative",className:"constellation",font:"sans",fg:"#fff",href:"/manwa/"},
@@ -55,3 +55,28 @@ document.querySelector("#theme").onclick=()=>{
 if(localStorage.getItem("theme")==="dark")document.body.classList.add("dark");
 document.querySelector("#year").textContent=new Date().getFullYear();
 render();
+
+const audioToggle=document.querySelector("#audio-toggle");
+if(audioToggle){
+  const bgAudio=new Audio("assets/best_audio.m4a");
+  bgAudio.preload="auto";
+
+  const setAudioState=playing=>{
+    audioToggle.classList.toggle("playing",playing);
+    audioToggle.setAttribute("aria-pressed",playing?"true":"false");
+    audioToggle.setAttribute("aria-label",playing?"Pause audio":"Play audio");
+    audioToggle.setAttribute("title",playing?"Pause audio":"Play audio");
+  };
+
+  audioToggle.onclick=()=>{
+    if(bgAudio.paused){
+      bgAudio.play().catch(err=>console.error("Audio playback error:",err));
+    }else{
+      bgAudio.pause();
+    }
+  };
+
+  bgAudio.onplay=()=>setAudioState(true);
+  bgAudio.onpause=()=>setAudioState(false);
+  bgAudio.onended=()=>setAudioState(false);
+}

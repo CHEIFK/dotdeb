@@ -2,10 +2,42 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#fff">
-<meta name="description" content="DOT DEB — games, experiments and stuff.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DOT • DEB — Games & Stuff</title>
+<meta name="description" content="DOT DEB — games, experiments and stuff.">
+<meta name="robots" content="index, follow">
+<meta name="author" content="Dotdeb">
+<link rel="canonical" href="https://dotdeb.dpdns.org/">
+
+<!-- Theme Color for light/dark appearance -->
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DOT DEB">
+<meta property="og:title" content="DOT • DEB — Games & Stuff">
+<meta property="og:description" content="DOT DEB — games, experiments and stuff.">
+<meta property="og:url" content="https://dotdeb.dpdns.org/">
+<meta property="og:locale" content="en_US">
+
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="DOT • DEB — Games & Stuff">
+<meta name="twitter:description" content="DOT DEB — games, experiments and stuff.">
+<meta name="twitter:url" content="https://dotdeb.dpdns.org/">
+
+<!-- Structured Data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "DOT DEB",
+  "url": "https://dotdeb.dpdns.org/",
+  "description": "DOT DEB — games, experiments and stuff."
+}
+</script>
+
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,6 +49,72 @@
 
     <div class="brand">
       <h1>DOT <i aria-hidden="true">●</i> DEB</h1>
+    </div>
+
+    <div class="header-actions">
+      <button id="audio-toggle" class="header-btn" type="button" aria-label="Play audio" aria-pressed="false" title="Play audio">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <!-- Outer circle -->
+          <circle
+            cx="12"
+            cy="12"
+            r="9.5"
+            stroke="currentColor"
+            stroke-width="2.2"
+          />
+
+          <!-- Inner curved stroke -->
+          <path
+            d="M7 13.5C7 9.9 9.5 7.5 12.8 7.5"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+          />
+
+          <!-- Center dot -->
+          <circle
+            cx="12"
+            cy="12"
+            r="2.2"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+
+      <button class="header-btn" type="button" aria-label="Open" tabindex="-1">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <!-- Small isometric box -->
+          <path
+            d="M12 4.5L18.5 8.2V15.8L12 19.5L5.5 15.8V8.2L12 4.5Z"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          />
+
+          <!-- Circular center -->
+          <circle
+            cx="12"
+            cy="12"
+            r="2.4"
+            stroke="currentColor"
+            stroke-width="1.8"
+          />
+        </svg>
+      </button>
     </div>
   </header>
 
