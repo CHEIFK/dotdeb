@@ -1,0 +1,15 @@
+{
+  "name": "continental-backend-api",
+  "version": "2.0.0",
+  "description": "Continental Mindustry Network Backend for DOT • DEB",
+  "main": "index.mjs",
+  "type": "module",
+  "scripts": {
+    "test": "node --check index.mjs auth.mjs mindustry-ping.mjs",
+    "hash-password": "node hash-password.mjs"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-ec2": "^3.1164.0",
+    "@aws-sdk/client-ssm": "^3.1164.0"
+  }
+}

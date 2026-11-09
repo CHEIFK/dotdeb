@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Continental Mindustry Network | DOT • DEB</title>
+<meta name="description" content="Continental Mindustry multiplayer network: Survival, Tower Defence, and Attack servers on AWS EC2.">
+<meta name="robots" content="index, follow">
+<meta name="author" content="Dotdeb">
+<link rel="canonical" href="https://dotdeb.dpdns.org/zootopia.html">
+
+<!-- Theme Color for light/dark appearance -->
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DOT DEB">
+<meta property="og:title" content="Continental Mindustry Network | DOT • DEB">
+<meta property="og:description" content="Three dedicated Mindustry servers: Survival, Tower Defence, and Attack.">
+<meta property="og:url" content="https://dotdeb.dpdns.org/zootopia.html">
+
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="zootopia.css">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<div class="site zootopia-site">
+  <!-- Navigation Header -->
+  <nav class="top-nav" aria-label="Breadcrumb and quick navigation">
+    <div class="nav-group">
+      <a class="back-link" href="index.html" title="Return to DOT • DEB homepage">
+        <span>←</span> DOT • DEB
+      </a>
+    </div>
+
+    <div class="brand">
+      <h1 style="font-family:'Arial Narrow',Arial,sans-serif;font-size:24px;margin:0;letter-spacing:-1px;font-weight:900;">
+        CONTINENTAL <i aria-hidden="true" style="display:inline-grid;place-items:center;width:.42em;height:.42em;border:2px solid currentColor;border-radius:50%;font-size:.3em;vertical-align:middle;">●</i> NETWORK
+      </h1>
+    </div>
+
+    <div class="nav-group">
+      <a class="admin-link" href="admin/login.html" title="Server Admin Login">Admin Sign In ↗</a>
+      <button id="theme" class="icon-button" type="button" title="Toggle appearance" aria-label="Toggle appearance">☼</button>
+    </div>
+  </nav>
+
+  <!-- Server Network Hero -->
+  <header class="server-hero">
+    <div class="hero-content">
+      <span class="eyebrow">MINDUSTRY MULTIPLAYER NETWORK · AP-SOUTHEAST-2</span>
+      <h1>Continental Network</h1>
+      <p class="hero-desc">
+        Three independent Mindustry worlds hosted on a dedicated AWS EC2 Ubuntu instance. Build production supply lines in <strong>Survival</strong>, hold the line in <strong>Tower Defence</strong>, or conquer opposing cores in <strong>Attack</strong>.
+      </p>
+    </div>
+
+    <div class="hero-actions">
+      <div id="network-status-pill" class="status-pill status-unknown">
+        <span class="status-dot"></span>
+        <span id="network-status-text">Checking Network...</span>
+      </div>
+      <button id="refresh-status-btn" class="refresh-btn" type="button" title="Refresh server network status">
+        ↻ Refresh
+      </button>
+    </div>
+  </header>
+
+  <!-- 3 INDEPENDENT SERVER CARDS GRID -->
+  <main id="main-content">
+    <section class="network-servers-grid" aria-label="Continental Mindustry Servers">
+      
+      <!-- SERVER 1: CONTINENTAL SURVIVAL (Port 6567) -->
+      <article class="server-card-box" id="card-survival">
+        <div>
+          <div class="server-card-head">
+            <span class="server-mode-badge">Co-op Survival</span>
+            <div id="status-pill-survival" class="status-pill status-unknown">
+              <span class="status-dot"></span>
+              <span id="status-text-survival">Unknown</span>
+            </div>
+          </div>
+          <h2 class="server-card-title">Continental Survival</h2>
+          <p class="server-card-desc">
+            Mining automation, resource routing, tech research, and planetary wave defense.
+          </p>
+        </div>
+
+        <div class="server-connect-box">
+          <div class="ip-display">
+            <span class="ip-label">Server Address</span>
+            <span class="ip-value" id="addr-survival">16.176.55.109:6567</span>
+          </div>
+          <button type="button" class="copy-btn" id="copy-btn-survival" data-ip="16.176.55.109:6567">
+            <span>📋 Copy IP</span>
+          </button>
+        </div>
+
+        <div class="server-stats-mini">
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Active Map</span>
+            <span class="stat-mini-value" id="map-survival">—</span>
+          </div>
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Wave</span>
+            <span class="stat-mini-value" id="wave-survival">—</span>
+          </div>
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Players</span>
+            <span class="stat-mini-value" id="players-survival">— / 24</span>
+            <div class="players-progress-bar">
+              <div class="players-progress-fill" id="progress-survival"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- SERVER 2: CONTINENTAL TOWER DEFENCE (Port 6568) -->
+      <article class="server-card-box" id="card-tower">
+        <div>
+          <div class="server-card-head">
+            <span class="server-mode-badge">Tower Defence</span>
+            <div id="status-pill-tower" class="status-pill status-unknown">
+              <span class="status-dot"></span>
+              <span id="status-text-tower">Unknown</span>
+            </div>
+          </div>
+          <h2 class="server-card-title">Continental Tower Defence</h2>
+          <p class="server-card-desc">
+            Heavy turret fortifications, energy conduits, and strategic boss choke points.
+          </p>
+        </div>
+
+        <div class="server-connect-box">
+          <div class="ip-display">
+            <span class="ip-label">Server Address</span>
+            <span class="ip-value" id="addr-tower">16.176.55.109:6568</span>
+          </div>
+          <button type="button" class="copy-btn" id="copy-btn-tower" data-ip="16.176.55.109:6568">
+            <span>📋 Copy IP</span>
+          </button>
+        </div>
+
+        <div class="server-stats-mini">
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Active Map</span>
+            <span class="stat-mini-value" id="map-tower">—</span>
+          </div>
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Wave</span>
+            <span class="stat-mini-value" id="wave-tower">—</span>
+          </div>
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Players</span>
+            <span class="stat-mini-value" id="players-tower">— / 24</span>
+            <div class="players-progress-bar">
+              <div class="players-progress-fill" id="progress-tower"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- SERVER 3: CONTINENTAL ATTACK (Port 6569) -->
+      <article class="server-card-box" id="card-attack">
+        <div>
+          <div class="server-card-head">
+            <span class="server-mode-badge">PvP / Attack</span>
+            <div id="status-pill-attack" class="status-pill status-unknown">
+              <span class="status-dot"></span>
+              <span id="status-text-attack">Unknown</span>
+            </div>
+          </div>
+          <h2 class="server-card-title">Continental Attack</h2>
+          <p class="server-card-desc">
+            Frontline unit assembly, base assault warfare, and destroying enemy cores.
+          </p>
+        </div>
+
+        <div class="server-connect-box">
+          <div class="ip-display">
+            <span class="ip-label">Server Address</span>
+            <span class="ip-value" id="addr-attack">16.176.55.109:6569</span>
+          </div>
+          <button type="button" class="copy-btn" id="copy-btn-attack" data-ip="16.176.55.109:6569">
+            <span>📋 Copy IP</span>
+          </button>
+        </div>
+
+        <div class="server-stats-mini">
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Active Map</span>
+            <span class="stat-mini-value" id="map-attack">—</span>
+          </div>
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Wave</span>
+            <span class="stat-mini-value" id="wave-attack">—</span>
+          </div>
+          <div class="stat-mini-item">
+            <span class="stat-mini-label">Players</span>
+            <span class="stat-mini-value" id="players-attack">— / 24</span>
+            <div class="players-progress-bar">
+              <div class="players-progress-fill" id="progress-attack"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- How to Join & Network Environment Guide -->
+    <section class="info-section">
+      <div class="info-panel">
+        <h3>How to Join Any Server</h3>
+        <ol class="steps-list">
+          <li>Launch <strong>Mindustry v7</strong> (Build 146 or compatible) on PC, Mac, Linux, or Mobile.</li>
+          <li>In the main menu, choose <strong>Play</strong> → <strong>Join Game</strong> → <strong>Add Server</strong>.</li>
+          <li>Paste the desired server address:
+            <ul>
+              <li>Survival: <code>16.176.55.109:6567</code></li>
+              <li>Tower Defence: <code>16.176.55.109:6568</code></li>
+              <li>Attack: <code>16.176.55.109:6569</code></li>
+            </ul>
+          </li>
+          <li>Click <strong>Connect</strong> and start playing!</li>
+        </ol>
+      </div>
+
+      <div class="info-panel">
+        <h3>Network Guidelines</h3>
+        <ul class="rule-list">
+          <li><span class="rule-bullet">✦</span> <strong>Co-op Etiquette:</strong> Avoid deconstructing existing core conveyor lines.</li>
+          <li><span class="rule-bullet">✦</span> <strong>Griefing Zero-Tolerance:</strong> Griefers are permanently banned network-wide.</li>
+          <li><span class="rule-bullet">✦</span> <strong>Independent Ports:</strong> Each mode runs as an isolated systemd daemon on the EC2 host.</li>
+          <li><span class="rule-bullet">✦</span> <strong>Version:</strong> Official Mindustry v7 build 146 protocol (TCP &amp; UDP).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Bottom Status Refresh Bar -->
+    <div class="refresh-bar">
+      <div>
+        <span id="last-checked-label">Status check: </span>
+        <strong id="last-checked-time">Checking status...</strong>
+      </div>
+      <div>
+        <span>Host Environment: <strong>AWS EC2 t3.small · Ubuntu 26.04 LTS</strong></span>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer id="about">
+    <div class="footer-top">
+      <strong>DOT • DEB</strong>
+      <a href="admin/login.html" style="color:var(--muted);text-decoration:none;">Admin Portal ↗</a>
+    </div>
+    <div class="footer-bottom">
+      <span>Continental Mindustry Network</span>
+      <span id="year"></span>
+    </div>
+    <div class="footer-copyright">
+      <p>© 2026 Dotdeb. All Rights Reserved.</p>
+      <p>Mindustry is an open-source game by Anuken. Continental is an independent three-server network hosted on AWS EC2.</p>
+    </div>
+  </footer>
+</div>
+
+<script src="config.js"></script>
+<script src="zootopia.js"></script>
+</body>
+</html>

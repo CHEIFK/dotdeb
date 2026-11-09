@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Zootopia Mindustry Server Management Backend
+  Continental Mindustry Network Server Management Backend
   AWS API Gateway HTTP API + Lambda + Systems Manager / EC2 integration
 
 Parameters:
@@ -18,21 +18,21 @@ Parameters:
   AdminPasswordHash:
     Type: String
     NoEcho: true
-    Default: '423d1916c88c4c504a354867012c11baa3f40b1701de3999003ee5253f8c2c19799a9e7a218c4ecdd0bb998b9fc0f6f6b9048b0d281ed30bb179893165edf665'
-    Description: Scrypt hex hash of the admin password (configured for chief / chief100)
+    Default: ''
+    Description: Secure scrypt hash formatted as salt:hash (generate using node hash-password.mjs)
 
   SessionSecret:
     Type: String
     NoEcho: true
-    Default: 'change-me-in-production-zootopia-secret-key-32b'
-    Description: Secret key used to sign HMAC-SHA256 session cookies
+    Default: ''
+    Description: Secret key used to sign HMAC-SHA256 session cookies (32+ random hex bytes)
 
 Resources:
   # IAM Execution Role for Lambda (Least-Privilege)
-  ZootopiaLambdaExecutionRole:
+  ContinentalLambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: ZootopiaBackendLambdaRole
+      RoleName: ContinentalBackendLambdaRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -43,7 +43,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: ZootopiaEc2AndSsmLeastPrivilege
+        - PolicyName: ContinentalEc2AndSsmLeastPrivilege
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -73,23 +73,23 @@ Resources:
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*'
 
   # CloudWatch Log Group with 14-day cost retention
-  ZootopiaApiFunctionLogGroup:
+  ContinentalApiFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/lambda/zootopia-backend-api'
+      LogGroupName: !Sub '/aws/lambda/continental-backend-api'
       RetentionInDays: 14
 
   # AWS Lambda Function
-  ZootopiaApiFunction:
+  ContinentalApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: zootopia-backend-api
+      FunctionName: continental-backend-api
       Runtime: nodejs20.x
       Handler: index.handler
       CodeUri: .
       MemorySize: 256
       Timeout: 15
-      Role: !GetAtt ZootopiaLambdaExecutionRole.Arn
+      Role: !GetAtt ContinentalLambdaExecutionRole.Arn
       Environment:
         Variables:
           EC2_INSTANCE_ID: !Ref Ec2InstanceId
@@ -100,21 +100,21 @@ Resources:
         HttpApiProxy:
           Type: HttpApi
           Properties:
-            ApiId: !Ref ZootopiaHttpApi
+            ApiId: !Ref ContinentalHttpApi
             Path: /{proxy+}
             Method: ANY
         HttpApiRoot:
           Type: HttpApi
           Properties:
-            ApiId: !Ref ZootopiaHttpApi
+            ApiId: !Ref ContinentalHttpApi
             Path: /
             Method: ANY
 
   # HTTP API Gateway (v2) with CORS configuration
-  ZootopiaHttpApi:
+  ContinentalHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
-      Name: zootopia-management-api
+      Name: continental-management-api
       CorsConfiguration:
         AllowOrigins:
           - 'https://dotdeb.dpdns.org'
@@ -134,10 +134,10 @@ Resources:
 Outputs:
   ApiEndpoint:
     Description: HTTP API Default Endpoint URL
-    Value: !Sub 'https://${ZootopiaHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+    Value: !Sub 'https://${ContinentalHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
   LambdaFunctionArn:
     Description: Lambda Function ARN
-    Value: !GetAtt ZootopiaApiFunction.Arn
+    Value: !GetAtt ContinentalApiFunction.Arn
   ExecutionRoleArn:
     Description: IAM Role ARN
-    Value: !GetAtt ZootopiaLambdaExecutionRole.Arn
+    Value: !GetAtt ContinentalLambdaExecutionRole.Arn

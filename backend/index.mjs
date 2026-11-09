@@ -19,7 +19,8 @@ import {
   generateCsrfToken,
   verifyCsrfToken,
   createSessionToken,
-  verifySessionToken
+  verifySessionToken,
+  revokeSession
 } from "./auth.mjs";
 
 import { pingMindustryServer } from "./mindustry-ping.mjs";
@@ -27,15 +28,59 @@ import { pingMindustryServer } from "./mindustry-ping.mjs";
 // Configured AWS resource details
 const REGION = process.env.AWS_REGION || "ap-southeast-2";
 const INSTANCE_ID = process.env.EC2_INSTANCE_ID || "i-02de910a9f70196b4";
-const MINDUSTRY_PORT = 6567;
-const DEFAULT_MAX_PLAYERS = 24;
-const DEFAULT_SERVER_NAME = "Zootopia";
+const DEFAULT_HOST = "16.176.55.109";
 
-// Primary FIFO path configured in systemd unit, with fallback to legacy path
-const FIFO_COMMAND_TEMPLATE =
-  `FIFO="/run/mindustry/mindustry.fifo"; ` +
-  `[ ! -p "$FIFO" ] && [ -p "/run/mindustry.stdin" ] && FIFO="/run/mindustry.stdin"; ` +
-  `timeout 2 sh -c`;
+// Continental Mindustry Network Servers Configuration
+const CONTINENTAL_SERVERS = {
+  survival: {
+    id: "survival",
+    name: "Continental Survival",
+    port: 6567,
+    service: "mindustry-survival",
+    defaultMaxPlayers: 24,
+    mode: "Survival",
+    description: "Cooperative survival, mining automation, and planetary wave defense."
+  },
+  tower: {
+    id: "tower",
+    name: "Continental Tower Defence",
+    port: 6568,
+    service: "mindustry-tower",
+    defaultMaxPlayers: 24,
+    mode: "Tower Defence",
+    description: "Strategic turret choke-points and energy barriers against relentless bosses."
+  },
+  attack: {
+    id: "attack",
+    name: "Continental Attack",
+    port: 6569,
+    service: "mindustry-attack",
+    defaultMaxPlayers: 24,
+    mode: "Attack",
+    description: "PvP assault and tactical frontline conquest to obliterate opposing enemy cores."
+  }
+};
+
+const VALID_SERVER_IDS = new Set(["survival", "tower", "attack"]);
+
+function resolveServer(serverId) {
+  if (!serverId || typeof serverId !== "string") return CONTINENTAL_SERVERS.survival;
+  const clean = serverId.trim().toLowerCase();
+  return CONTINENTAL_SERVERS[clean] || null;
+}
+
+function getFifoCommandTemplate(serverId) {
+  const srv = resolveServer(serverId);
+  if (!srv) throw new Error(`Invalid server identifier: ${serverId}`);
+  const service = srv.service;
+  return (
+    `FIFO="/run/mindustry/${srv.id}.fifo"; ` +
+    `[ ! -p "$FIFO" ] && [ -p "/run/${service}/stdin" ] && FIFO="/run/${service}/stdin"; ` +
+    `[ ! -p "$FIFO" ] && [ -p "/run/mindustry/${service}.fifo" ] && FIFO="/run/mindustry/${service}.fifo"; ` +
+    `[ ! -p "$FIFO" ] && [ -p "/run/${service}.stdin" ] && FIFO="/run/${service}.stdin"; ` +
+    `timeout 2 sh -c`
+  );
+}
 
 const ec2 = new EC2Client({ region: REGION });
 const ssm = new SSMClient({ region: REGION });
@@ -54,16 +99,20 @@ function getCorsHeaders(requestOrigin) {
     "http://localhost:8080",
     "http://127.0.0.1:8080"
   ];
-  const origin = allowedOrigins.includes(requestOrigin)
-    ? requestOrigin
-    : "https://dotdeb.dpdns.org";
+  let origin = "https://dotdeb.dpdns.org";
+  if (requestOrigin) {
+    if (allowedOrigins.includes(requestOrigin) || requestOrigin.endsWith(".app.github.dev")) {
+      origin = requestOrigin;
+    }
+  }
 
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers": "Content-Type, X-CSRF-Token, Authorization",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Max-Age": "86400"
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin"
   };
 }
 
@@ -92,109 +141,102 @@ function buildResponse(statusCode, body, corsHeaders, cookiesList = [], extraHea
     body: JSON.stringify(body)
   };
 
-  if (cookiesList && cookiesList.length > 0) {
-    // API Gateway HTTP API v2 native cookies array
+  if (cookiesList.length > 0) {
     response.cookies = cookiesList;
-    // API Gateway v1 / fallback Set-Cookie header
     response.headers["Set-Cookie"] = cookiesList[0];
-    response.multiValueHeaders = { "Set-Cookie": cookiesList };
   }
 
   return response;
 }
 
+/**
+ * Retrieves EC2 instance state and public IP address
+ */
 async function getEc2InstanceInfo() {
   try {
-    const cmd = new DescribeInstancesCommand({
-      InstanceIds: [INSTANCE_ID]
-    });
+    const cmd = new DescribeInstancesCommand({ InstanceIds: [INSTANCE_ID] });
     const res = await ec2.send(cmd);
     const reservation = res.Reservations?.[0];
     const instance = reservation?.Instances?.[0];
 
     if (!instance) {
-      return { found: false, state: "unknown", publicIp: null };
+      return { found: false, state: "unknown", publicIp: DEFAULT_HOST };
     }
+
+    const state = instance.State?.Name || "unknown";
+    const publicIp = instance.PublicIpAddress || DEFAULT_HOST;
 
     return {
       found: true,
-      state: instance.State?.Name || "unknown",
-      publicIp: instance.PublicIpAddress || null,
-      privateIp: instance.PrivateIpAddress || null,
-      launchTime: instance.LaunchTime || null
+      instanceId: instance.InstanceId,
+      state,
+      publicIp,
+      instanceType: instance.InstanceType || "t3.small",
+      launchTime: instance.LaunchTime
     };
   } catch (err) {
-    console.error("EC2 Describe error:", err);
-    return { found: false, state: "error", publicIp: null, error: err.message };
+    console.error("EC2 DescribeInstances error:", err.message);
+    return { found: false, state: "unknown", publicIp: DEFAULT_HOST, error: err.message };
   }
 }
 
-async function executeSsmShell(script, waitMs = 1200) {
+/**
+ * Executes a shell command via AWS Systems Manager Run Command
+ */
+async function executeSsmShell(commandString, waitTimeoutMs = 1500) {
   try {
     const sendCmd = new SendCommandCommand({
       InstanceIds: [INSTANCE_ID],
       DocumentName: "AWS-RunShellScript",
       Parameters: {
-        commands: [script]
+        commands: [commandString]
       },
       TimeoutSeconds: 15
     });
 
     const sendRes = await ssm.send(sendCmd);
     const commandId = sendRes.Command?.CommandId;
+
     if (!commandId) {
-      return { success: false, error: "SSM SendCommand did not return CommandId" };
+      return { ok: false, error: "Failed to initiate SSM Command" };
     }
 
-    if (waitMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-      try {
-        const invRes = await ssm.send(
-          new GetCommandInvocationCommand({
-            CommandId: commandId,
-            InstanceId: INSTANCE_ID
-          })
-        );
-        return {
-          success: true,
-          status: invRes.Status,
-          stdout: invRes.StandardOutputContent || "",
-          stderr: invRes.StandardErrorContent || ""
-        };
-      } catch (pollErr) {
-        return {
-          success: true,
-          status: "InProgress",
-          stdout: "Command queued in SSM.",
-          stderr: ""
-        };
-      }
-    }
+    await new Promise((r) => setTimeout(r, waitTimeoutMs));
 
-    return { success: true, status: "Dispatched", stdout: "", stderr: "" };
+    const invCmd = new GetCommandInvocationCommand({
+      CommandId: commandId,
+      InstanceId: INSTANCE_ID
+    });
+
+    const invRes = await ssm.send(invCmd);
+    return {
+      ok: invRes.Status === "Success",
+      status: invRes.Status,
+      stdout: invRes.StandardOutputContent || "",
+      stderr: invRes.StandardErrorContent || "",
+      exitCode: invRes.ResponseCode
+    };
   } catch (err) {
-    console.error("SSM Execution Error:", err);
-    return { success: false, error: err.message };
+    console.warn("SSM execution warning:", err.message);
+    return { ok: false, error: err.message };
   }
 }
 
-export const handler = async (event) => {
+export async function handler(event) {
+  const origin = event.headers?.origin || event.headers?.Origin || "";
+  const corsHeaders = getCorsHeaders(origin);
   const method = (event.requestContext?.http?.method || event.httpMethod || "GET").toUpperCase();
+
   const rawPath = event.rawPath || event.path || "/";
   const path = rawPath.replace(/\/+$/, "") || "/";
-  const headers = event.headers || {};
-  const origin = headers.origin || headers.Origin || "";
-  const clientIp = event.requestContext?.http?.sourceIp || event.requestContext?.identity?.sourceIp || "unknown";
-  const corsHeaders = getCorsHeaders(origin);
 
-  // 1. Mandatory HTTPS enforcement (except local development)
-  const forwardedProto = headers["x-forwarded-proto"] || headers["X-Forwarded-Proto"] || "https";
-  const isLocalOrigin = origin.includes("localhost") || origin.includes("127.0.0.1");
-  if (forwardedProto === "http" && !isLocalOrigin) {
+  // Enforce HTTPS
+  const proto = event.headers?.["x-forwarded-proto"] || "https";
+  if (proto !== "https" && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
     return buildResponse(403, { error: "HTTPS is required.", code: "HTTPS_REQUIRED" }, corsHeaders);
   }
 
-  // 2. Handle CORS Preflight
+  // Handle CORS preflight
   if (method === "OPTIONS") {
     return {
       statusCode: 204,
@@ -203,30 +245,26 @@ export const handler = async (event) => {
     };
   }
 
-  // 3. Parse Cookies & Session
-  const cookies = parseCookies(headers.cookie || headers.Cookie);
-  const sessionToken = cookies.zootopia_session || cookies.admin_session;
-  const session = verifySessionToken(sessionToken);
-  const cookieCsrf = cookies.csrf_token || cookies["XSRF-TOKEN"];
+  const cookies = parseCookies(event.headers?.cookie || event.headers?.Cookie || "");
+  const sessionToken = cookies.continental_session || cookies.zootopia_session || cookies.admin_session;
+  const clientIp =
+    event.requestContext?.http?.sourceIp ||
+    event.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    "unknown";
 
-  // 4. Parse Body for mutating methods
   let body = {};
   if (method === "POST" && event.body) {
     try {
-      body = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf-8") : event.body);
+      const rawBody = event.isBase64Encoded
+        ? Buffer.from(event.body, "base64").toString("utf-8")
+        : event.body;
+      body = JSON.parse(rawBody);
     } catch {
-      body = {};
+      return buildResponse(400, { error: "Malformed JSON body.", code: "BAD_JSON" }, corsHeaders);
     }
   }
 
-  // Helper to verify CSRF on protected mutating endpoints
-  function checkCsrfProtection() {
-    const clientHeaderCsrf = headers["x-csrf-token"] || headers["X-CSRF-Token"] || headers["x-xsrf-token"];
-    if (!verifyCsrfToken(clientHeaderCsrf, cookieCsrf)) {
-      return false;
-    }
-    return true;
-  }
+  const query = event.queryStringParameters || {};
 
   // ----------------------------------------------------
   // PUBLIC ENDPOINTS
@@ -235,62 +273,141 @@ export const handler = async (event) => {
   // GET /api/mindustry/status or /api/server/status
   if (method === "GET" && (path === "/api/mindustry/status" || path === "/api/server/status")) {
     const ec2Info = await getEc2InstanceInfo();
+    const host = ec2Info.publicIp || DEFAULT_HOST;
+    const requestedServer = query.server ? resolveServer(query.server) : null;
 
-    // If EC2 is stopped or not running, report Offline immediately
+    // If EC2 is stopped or not running, report all three servers as Offline immediately
     if (!ec2Info.found || ec2Info.state !== "running") {
-      return buildResponse(200, {
+      const offlineServers = {};
+      for (const [key, srv] of Object.entries(CONTINENTAL_SERVERS)) {
+        offlineServers[key] = {
+          id: srv.id,
+          name: srv.name,
+          game: "Mindustry",
+          ip: host,
+          port: srv.port,
+          mode: srv.mode,
+          online: false,
+          status: "Offline",
+          map: null,
+          wave: null,
+          players: 0,
+          playersOnline: 0,
+          maxPlayers: srv.defaultMaxPlayers
+        };
+      }
+
+      const responsePayload = {
         online: false,
         status: "Offline",
-        serverName: DEFAULT_SERVER_NAME,
-        game: "Mindustry",
-        ip: ec2Info.publicIp || "3.26.168.37",
-        port: MINDUSTRY_PORT,
-        map: null,
-        wave: null,
-        players: 0,
-        playersOnline: 0,
-        maxPlayers: DEFAULT_MAX_PLAYERS,
+        ec2State: ec2Info.state,
+        host,
+        network: "Continental Mindustry Network",
         checkedAt: new Date().toISOString(),
-        ec2State: ec2Info.state
-      }, corsHeaders);
+        servers: offlineServers
+      };
+
+      if (requestedServer && offlineServers[requestedServer.id]) {
+        Object.assign(responsePayload, offlineServers[requestedServer.id]);
+      }
+
+      return buildResponse(200, responsePayload, corsHeaders);
     }
 
-    // Ping Mindustry UDP
-    const ping = await pingMindustryServer(ec2Info.publicIp, MINDUSTRY_PORT, 1500);
+    // Ping all 3 servers via UDP concurrently
+    const [pingSurvival, pingTower, pingAttack] = await Promise.all([
+      pingMindustryServer(host, CONTINENTAL_SERVERS.survival.port, 1500, CONTINENTAL_SERVERS.survival.name),
+      pingMindustryServer(host, CONTINENTAL_SERVERS.tower.port, 1500, CONTINENTAL_SERVERS.tower.name),
+      pingMindustryServer(host, CONTINENTAL_SERVERS.attack.port, 1500, CONTINENTAL_SERVERS.attack.name)
+    ]);
 
-    return buildResponse(200, {
-      online: ping.online === true,
-      status: ping.online ? "Online" : "Offline",
-      serverName: ping.serverName || DEFAULT_SERVER_NAME,
-      game: "Mindustry",
-      ip: ec2Info.publicIp,
-      port: MINDUSTRY_PORT,
-      map: ping.map || "Glacier",
-      wave: ping.wave !== undefined ? ping.wave : 1,
-      players: ping.playersOnline || 0,
-      playersOnline: ping.playersOnline || 0,
-      maxPlayers: ping.maxPlayers || DEFAULT_MAX_PLAYERS,
+    const liveServers = {
+      survival: {
+        id: "survival",
+        name: pingSurvival.serverName || CONTINENTAL_SERVERS.survival.name,
+        game: "Mindustry",
+        ip: host,
+        port: CONTINENTAL_SERVERS.survival.port,
+        mode: CONTINENTAL_SERVERS.survival.mode,
+        online: pingSurvival.online === true,
+        status: pingSurvival.online ? "Online" : "Offline",
+        map: pingSurvival.map || "Glacier",
+        wave: pingSurvival.wave ?? 1,
+        players: pingSurvival.playersOnline || 0,
+        playersOnline: pingSurvival.playersOnline || 0,
+        maxPlayers: pingSurvival.maxPlayers || CONTINENTAL_SERVERS.survival.defaultMaxPlayers
+      },
+      tower: {
+        id: "tower",
+        name: pingTower.serverName || CONTINENTAL_SERVERS.tower.name,
+        game: "Mindustry",
+        ip: host,
+        port: CONTINENTAL_SERVERS.tower.port,
+        mode: CONTINENTAL_SERVERS.tower.mode,
+        online: pingTower.online === true,
+        status: pingTower.online ? "Online" : "Offline",
+        map: pingTower.map || "Fortress",
+        wave: pingTower.wave ?? 1,
+        players: pingTower.playersOnline || 0,
+        playersOnline: pingTower.playersOnline || 0,
+        maxPlayers: pingTower.maxPlayers || CONTINENTAL_SERVERS.tower.defaultMaxPlayers
+      },
+      attack: {
+        id: "attack",
+        name: pingAttack.serverName || CONTINENTAL_SERVERS.attack.name,
+        game: "Mindustry",
+        ip: host,
+        port: CONTINENTAL_SERVERS.attack.port,
+        mode: CONTINENTAL_SERVERS.attack.mode,
+        online: pingAttack.online === true,
+        status: pingAttack.online ? "Online" : "Offline",
+        map: pingAttack.map || "Frontline",
+        wave: pingAttack.wave ?? 1,
+        players: pingAttack.playersOnline || 0,
+        playersOnline: pingAttack.playersOnline || 0,
+        maxPlayers: pingAttack.maxPlayers || CONTINENTAL_SERVERS.attack.defaultMaxPlayers
+      }
+    };
+
+    const anyOnline = Object.values(liveServers).some((s) => s.online);
+
+    const responsePayload = {
+      online: anyOnline,
+      status: anyOnline ? "Online" : "Offline",
+      ec2State: ec2Info.state,
+      host,
+      network: "Continental Mindustry Network",
       checkedAt: new Date().toISOString(),
-      ec2State: ec2Info.state
-    }, corsHeaders);
+      servers: liveServers
+    };
+
+    if (requestedServer && liveServers[requestedServer.id]) {
+      Object.assign(responsePayload, liveServers[requestedServer.id]);
+    }
+
+    return buildResponse(200, responsePayload, corsHeaders);
   }
+
+  // ----------------------------------------------------
+  // AUTHENTICATION ENDPOINTS
+  // ----------------------------------------------------
 
   // GET /api/auth/csrf
   if (method === "GET" && path === "/api/auth/csrf") {
     const csrf = generateCsrfToken();
-    const csrfCookie = `csrf_token=${csrf}; Path=/; Max-Age=28800; Secure; SameSite=None`;
+    const csrfCookie = `csrf_token=${csrf}; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=None`;
     return buildResponse(200, { csrfToken: csrf }, corsHeaders, [csrfCookie]);
   }
 
   // POST /api/auth/login
   if (method === "POST" && path === "/api/auth/login") {
-    const rate = checkRateLimit(clientIp);
-    if (!rate.allowed) {
+    const rateCheck = checkRateLimit(clientIp);
+    if (!rateCheck.allowed) {
       return buildResponse(429, {
-        error: `Too many login attempts. Please retry in ${rate.retryAfter} seconds.`,
+        error: `Too many failed login attempts. Try again in ${rateCheck.retryAfter} seconds.`,
         code: "RATE_LIMITED",
-        retryAfter: rate.retryAfter
-      }, corsHeaders, [], { "Retry-After": String(rate.retryAfter) });
+        retryAfter: rateCheck.retryAfter
+      }, corsHeaders);
     }
 
     const { username, password } = body;
@@ -298,56 +415,68 @@ export const handler = async (event) => {
       return buildResponse(400, { error: "Username and password are required.", code: "VALIDATION_ERROR" }, corsHeaders);
     }
 
-    const isValid = verifyCredentials(username.trim(), password);
+    // CSRF Check for login
+    const headerCsrf = event.headers?.["x-csrf-token"] || event.headers?.["X-CSRF-Token"];
+    if (headerCsrf && cookies.csrf_token) {
+      if (!verifyCsrfToken(headerCsrf, cookies.csrf_token)) {
+        return buildResponse(403, { error: "Invalid CSRF token.", code: "CSRF_FAILED" }, corsHeaders);
+      }
+    }
+
+    const isValid = verifyCredentials(username, password);
     if (!isValid) {
       recordFailedAttempt(clientIp);
       return buildResponse(401, { error: "Invalid username or password.", code: "AUTH_FAILED" }, corsHeaders);
     }
 
     resetAttempts(clientIp);
-    const token = createSessionToken(username.trim());
-    const csrfToken = generateCsrfToken();
 
-    // Secure cross-site cookies for dotdeb frontend
-    const sessionCookie = `zootopia_session=${token}; Path=/; Max-Age=28800; HttpOnly; Secure; SameSite=None`;
-    const csrfCookie = `csrf_token=${csrfToken}; Path=/; Max-Age=28800; Secure; SameSite=None`;
+    const token = createSessionToken(username);
+    const newCsrf = generateCsrfToken();
+
+    const sessionCookie = `continental_session=${token}; Path=/; Max-Age=28800; HttpOnly; Secure; SameSite=None`;
+    const csrfCookie = `csrf_token=${newCsrf}; Path=/; Max-Age=28800; HttpOnly; Secure; SameSite=None`;
 
     return buildResponse(200, {
-      authenticated: true,
-      user: { username: username.trim() },
-      csrfToken
+      ok: true,
+      user: username,
+      csrfToken: newCsrf,
+      message: "Authentication successful."
     }, corsHeaders, [sessionCookie, csrfCookie]);
   }
 
   // GET /api/auth/session
   if (method === "GET" && path === "/api/auth/session") {
-    if (session) {
-      const csrfToken = generateCsrfToken();
-      const csrfCookie = `csrf_token=${csrfToken}; Path=/; Max-Age=28800; Secure; SameSite=None`;
+    const payload = verifySessionToken(sessionToken);
+    if (payload) {
       return buildResponse(200, {
         authenticated: true,
-        user: { username: session.username },
-        csrfToken
-      }, corsHeaders, [csrfCookie]);
+        user: payload.username,
+        exp: payload.exp
+      }, corsHeaders);
     }
     return buildResponse(401, {
       authenticated: false,
-      reason: "NO_ACTIVE_SESSION",
-      message: "No active session."
+      error: "Session expired or invalid.",
+      code: "UNAUTHORIZED"
     }, corsHeaders);
   }
 
   // POST /api/auth/logout
   if (method === "POST" && path === "/api/auth/logout") {
-    const clearSession = `zootopia_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`;
-    const clearCsrf = `csrf_token=; Path=/; Max-Age=0; Secure; SameSite=None`;
+    if (sessionToken) {
+      revokeSession(sessionToken);
+    }
+    const clearSession = `continental_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`;
+    const clearCsrf = `csrf_token=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`;
     return buildResponse(200, { ok: true, message: "Logged out successfully." }, corsHeaders, [clearSession, clearCsrf]);
   }
 
   // ----------------------------------------------------
   // PROTECTED ADMIN ENDPOINTS
   // ----------------------------------------------------
-  const isAdminPath =
+
+  const isProtectedPath =
     path.startsWith("/api/admin") ||
     path.startsWith("/api/mindustry/control") ||
     path === "/api/mindustry/config" ||
@@ -357,20 +486,22 @@ export const handler = async (event) => {
     path === "/api/mindustry/console" ||
     path === "/api/mindustry/metrics";
 
-  if (isAdminPath) {
+  if (isProtectedPath) {
+    const session = verifySessionToken(sessionToken);
     if (!session) {
       return buildResponse(401, {
-        error: "Authentication required for admin management.",
+        error: "Administrative authentication required.",
         code: "UNAUTHORIZED"
       }, corsHeaders);
     }
 
-    // CSRF verification on state-changing requests
+    // Require valid CSRF token for all state-changing admin actions
     if (method === "POST") {
-      if (!checkCsrfProtection()) {
+      const headerCsrf = event.headers?.["x-csrf-token"] || event.headers?.["X-CSRF-Token"];
+      if (!verifyCsrfToken(headerCsrf, cookies.csrf_token)) {
         return buildResponse(403, {
-          error: "Invalid or missing CSRF token. Request rejected.",
-          code: "CSRF_ERROR"
+          error: "CSRF token missing or invalid.",
+          code: "CSRF_FAILED"
         }, corsHeaders);
       }
     }
@@ -378,64 +509,89 @@ export const handler = async (event) => {
     // GET /api/mindustry/metrics or /api/admin/server/overview
     if (method === "GET" && (path === "/api/mindustry/metrics" || path === "/api/admin/server/overview")) {
       const ec2Info = await getEc2InstanceInfo();
+      const host = ec2Info.publicIp || DEFAULT_HOST;
+      const targetServer = resolveServer(query.server) || CONTINENTAL_SERVERS.survival;
 
       if (!ec2Info.found || ec2Info.state !== "running") {
         return buildResponse(200, {
-          online: false,
-          status: "Offline",
-          serverName: DEFAULT_SERVER_NAME,
-          ip: ec2Info.publicIp || "3.26.168.37",
-          port: MINDUSTRY_PORT,
-          uptime: "Instance Stopped",
-          map: "Glacier",
-          wave: 0,
-          players: 0,
-          playersOnline: 0,
-          maxPlayers: DEFAULT_MAX_PLAYERS,
-          cpuPercent: 0,
-          ramUsedMb: 0,
-          ramTotalMb: 2048,
-          ec2State: ec2Info.state
+          ok: true,
+          ec2: {
+            state: ec2Info.state,
+            instanceId: INSTANCE_ID,
+            publicIp: host,
+            region: REGION
+          },
+          targetServer: targetServer.id,
+          mindustry: {
+            id: targetServer.id,
+            name: targetServer.name,
+            service: targetServer.service,
+            online: false,
+            port: targetServer.port,
+            status: "Offline"
+          },
+          metrics: {
+            uptime: "EC2 Stopped",
+            cpu: "0%",
+            ram: "0 MB / 0 MB",
+            services: {
+              "mindustry-survival": "inactive",
+              "mindustry-tower": "inactive",
+              "mindustry-attack": "inactive"
+            }
+          }
         }, corsHeaders);
       }
 
-      // Query host telemetry via SSM
-      const ssmRes = await executeSsmShell(
-        `uptime -p; free -m; ps aux | grep -i '[s]erver-release.jar' | wc -l; journalctl -u mindustry.service -n 15 --no-pager`,
-        1200
-      );
+      // Ping target server and collect host telemetry via SSM
+      const [pingTarget, ssmRes] = await Promise.all([
+        pingMindustryServer(host, targetServer.port, 1500, targetServer.name),
+        executeSsmShell(
+          `uptime -p; free -m; systemctl is-active mindustry-survival mindustry-tower mindustry-attack; journalctl -u ${targetServer.service} -n 15 --no-pager`,
+          1200
+        )
+      ]);
 
-      const ping = await pingMindustryServer(ec2Info.publicIp, MINDUSTRY_PORT, 1200);
+      const stdout = ssmRes.stdout || "";
+      const lines = stdout.split("\n");
+      const uptimeStr = lines[0] || "Running";
+      const ramLine = lines.find((l) => l.startsWith("Mem:"));
 
-      // Parse memory usage if free -m output is available
-      let ramUsedMb = 512;
-      let ramTotalMb = 2048;
-      if (ssmRes.stdout) {
-        const memMatch = ssmRes.stdout.match(/Mem:\s+(\d+)\s+(\d+)/);
-        if (memMatch) {
-          ramTotalMb = parseInt(memMatch[1], 10);
-          ramUsedMb = parseInt(memMatch[2], 10);
+      let ramUsage = "—";
+      if (ramLine) {
+        const parts = ramLine.split(/\s+/);
+        if (parts.length >= 3) {
+          ramUsage = `${parts[2]} MB / ${parts[1]} MB`;
         }
       }
 
-      const uptime = ssmRes.stdout ? ssmRes.stdout.split("\n")[0].replace(/^up /, "") : "Online";
-
       return buildResponse(200, {
-        online: ping.online === true,
-        status: ping.online ? "Online" : "Starting",
-        serverName: ping.serverName || DEFAULT_SERVER_NAME,
-        ip: ec2Info.publicIp,
-        port: MINDUSTRY_PORT,
-        uptime,
-        map: ping.map || "Glacier",
-        wave: ping.wave !== undefined ? ping.wave : 1,
-        players: ping.playersOnline || 0,
-        playersOnline: ping.playersOnline || 0,
-        maxPlayers: ping.maxPlayers || DEFAULT_MAX_PLAYERS,
-        cpuPercent: 5,
-        ramUsedMb,
-        ramTotalMb,
-        ec2State: ec2Info.state
+        ok: true,
+        ec2: {
+          state: ec2Info.state,
+          instanceId: INSTANCE_ID,
+          publicIp: host,
+          region: REGION
+        },
+        targetServer: targetServer.id,
+        mindustry: {
+          id: targetServer.id,
+          name: pingTarget.serverName || targetServer.name,
+          service: targetServer.service,
+          online: pingTarget.online === true,
+          port: targetServer.port,
+          status: pingTarget.online ? "Online" : "Offline",
+          map: pingTarget.map || "Glacier",
+          wave: pingTarget.wave ?? 1,
+          players: pingTarget.playersOnline || 0,
+          maxPlayers: pingTarget.maxPlayers || targetServer.defaultMaxPlayers,
+          version: pingTarget.version || 146
+        },
+        metrics: {
+          uptime: uptimeStr,
+          ram: ramUsage,
+          ssmStatus: ssmRes.status
+        }
       }, corsHeaders);
     }
 
@@ -454,45 +610,96 @@ export const handler = async (event) => {
         return buildResponse(400, { error: "Action must be start, stop, or restart." }, corsHeaders);
       }
 
+      const targetId = body.server || body.serverId;
       const ec2Info = await getEc2InstanceInfo();
 
-      if (action === "start") {
-        if (ec2Info.state === "running") {
-          return buildResponse(200, { message: "Server EC2 instance is already running.", ok: true }, corsHeaders);
+      // EC2 Host Power Controls
+      if (targetId === "ec2" || (!targetId && action === "start")) {
+        if (action === "start") {
+          if (ec2Info.state === "running") {
+            return buildResponse(200, { message: "EC2 instance is already running.", ok: true }, corsHeaders);
+          }
+          await ec2.send(new StartInstancesCommand({ InstanceIds: [INSTANCE_ID] }));
+          return buildResponse(200, {
+            ok: true,
+            message: "AWS EC2 instance start requested. All Continental servers will boot automatically.",
+            action: "start",
+            target: "ec2"
+          }, corsHeaders);
         }
-        await ec2.send(new StartInstancesCommand({ InstanceIds: [INSTANCE_ID] }));
+
+        if (action === "stop") {
+          if (ec2Info.state !== "running") {
+            return buildResponse(200, { message: `Instance is already in ${ec2Info.state} state.`, ok: true }, corsHeaders);
+          }
+          // Gracefully save worlds for all 3 servers before stopping EC2
+          await executeSsmShell(
+            `${getFifoCommandTemplate("survival")} "echo 'save auto_shutdown' > \\$FIFO"; ` +
+            `${getFifoCommandTemplate("tower")} "echo 'save auto_shutdown' > \\$FIFO"; ` +
+            `${getFifoCommandTemplate("attack")} "echo 'save auto_shutdown' > \\$FIFO"; ` +
+            `sleep 2; systemctl stop mindustry-survival mindustry-tower mindustry-attack`,
+            3000
+          );
+          await ec2.send(new StopInstancesCommand({ InstanceIds: [INSTANCE_ID] }));
+          return buildResponse(200, {
+            ok: true,
+            message: "Saved all worlds and issued EC2 Stop command.",
+            action: "stop",
+            target: "ec2"
+          }, corsHeaders);
+        }
+      }
+
+      // Individual Server Service Control (Survival, Tower, or Attack)
+      const targetServer = resolveServer(targetId);
+      if (!targetServer) {
+        return buildResponse(400, {
+          error: "Invalid or missing server parameter. Must be 'survival', 'tower', or 'attack'.",
+          code: "INVALID_SERVER"
+        }, corsHeaders);
+      }
+
+      if (ec2Info.state !== "running") {
+        return buildResponse(400, {
+          error: `Cannot control service ${targetServer.service} while EC2 is stopped. Start EC2 host first.`,
+          code: "EC2_STOPPED"
+        }, corsHeaders);
+      }
+
+      if (action === "start") {
+        const ssmRes = await executeSsmShell(`systemctl start ${targetServer.service}`, 1500);
         return buildResponse(200, {
           ok: true,
-          message: "AWS EC2 instance start requested. Mindustry service will automatically boot.",
-          action: "start"
+          message: `Issued systemctl start ${targetServer.service}.`,
+          server: targetServer.id,
+          ssmStatus: ssmRes.status
         }, corsHeaders);
       }
 
       if (action === "stop") {
-        if (ec2Info.state !== "running") {
-          return buildResponse(200, { message: `Instance is already in ${ec2Info.state} state.`, ok: true }, corsHeaders);
-        }
-        // Save world cleanly to disk and wait 3000ms before stopping the EC2 instance
-        await executeSsmShell(
-          `${FIFO_COMMAND_TEMPLATE} "echo 'save auto_shutdown' > \\$FIFO"; sleep 2; systemctl stop mindustry.service`,
-          3000
+        const fifo = getFifoCommandTemplate(targetServer.id);
+        const ssmRes = await executeSsmShell(
+          `${fifo} "echo 'save auto_stop' > \\$FIFO"; sleep 1; systemctl stop ${targetServer.service}`,
+          2000
         );
-        await ec2.send(new StopInstancesCommand({ InstanceIds: [INSTANCE_ID] }));
         return buildResponse(200, {
           ok: true,
-          message: "Saved world state and issued EC2 Stop command.",
-          action: "stop"
+          message: `Saved world and stopped ${targetServer.name} (${targetServer.service}).`,
+          server: targetServer.id,
+          ssmStatus: ssmRes.status
         }, corsHeaders);
       }
 
       if (action === "restart") {
-        if (ec2Info.state !== "running") {
-          return buildResponse(400, { error: "Cannot restart service while EC2 instance is stopped." }, corsHeaders);
-        }
-        const ssmRes = await executeSsmShell(`systemctl restart mindustry.service`, 1200);
+        const fifo = getFifoCommandTemplate(targetServer.id);
+        const ssmRes = await executeSsmShell(
+          `${fifo} "echo 'save auto_restart' > \\$FIFO"; sleep 1; systemctl restart ${targetServer.service}`,
+          2000
+        );
         return buildResponse(200, {
           ok: true,
-          message: "Issued systemctl restart mindustry.service via SSM.",
+          message: `Issued systemctl restart ${targetServer.service}.`,
+          server: targetServer.id,
           ssmStatus: ssmRes.status
         }, corsHeaders);
       }
@@ -500,71 +707,94 @@ export const handler = async (event) => {
 
     // POST /api/mindustry/config or /api/admin/server/config
     if (method === "POST" && (path === "/api/mindustry/config" || path === "/api/admin/server/config")) {
+      const targetServer = resolveServer(body.server || body.serverId);
+      if (!targetServer) {
+        return buildResponse(400, { error: "Valid target server (survival, tower, attack) required." }, corsHeaders);
+      }
+
       const ec2Info = await getEc2InstanceInfo();
       if (ec2Info.state !== "running") {
         return buildResponse(400, { error: "EC2 instance is stopped. Start server first." }, corsHeaders);
       }
 
+      const fifo = getFifoCommandTemplate(targetServer.id);
       const commands = [];
       const serverName = body.name || body.serverName;
       if (serverName) {
         const cleanName = String(serverName).replace(/[^a-zA-Z0-9 _-]/g, "").slice(0, 48);
-        commands.push(`${FIFO_COMMAND_TEMPLATE} "echo 'config name ${cleanName}' > \\$FIFO"`);
+        commands.push(`${fifo} "echo 'config name ${cleanName}' > \\$FIFO"`);
       }
 
       const playerLimit = body.playerLimit || body.maxPlayers;
       if (playerLimit && Number.isFinite(Number(playerLimit))) {
         const limit = Math.max(1, Math.min(64, Number(playerLimit)));
-        commands.push(`${FIFO_COMMAND_TEMPLATE} "echo 'config playerLimit ${limit}' > \\$FIFO"`);
+        commands.push(`${fifo} "echo 'config playerLimit ${limit}' > \\$FIFO"`);
       }
 
-      const desc = body.description || body.motd;
-      if (desc) {
-        const cleanDesc = String(desc).replace(/[^a-zA-Z0-9 _.,!?:-]/g, "").slice(0, 140);
-        commands.push(`${FIFO_COMMAND_TEMPLATE} "echo 'config desc ${cleanDesc}' > \\$FIFO"`);
+      const motd = body.motd || body.message;
+      if (motd) {
+        const cleanMotd = String(motd).replace(/[^a-zA-Z0-9 _.,!?:-]/g, "").slice(0, 100);
+        commands.push(`${fifo} "echo 'config desc ${cleanMotd}' > \\$FIFO"`);
       }
 
-      const map = body.map || body.nextMap;
+      const map = body.map;
       if (map) {
-        const cleanMap = String(map).replace(/[^a-zA-Z0-9 _-]/g, "").slice(0, 48);
-        commands.push(`${FIFO_COMMAND_TEMPLATE} "echo 'nextmap ${cleanMap}' > \\$FIFO"`);
-      }
-
-      // Configure default auto-save and public visibility if requested
-      if (body.autosave !== undefined || body.autoSave !== undefined) {
-        commands.push(`${FIFO_COMMAND_TEMPLATE} "echo 'config autosave true' > \\$FIFO"`);
+        const cleanMap = String(map).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
+        commands.push(`${fifo} "echo 'host ${cleanMap}' > \\$FIFO"`);
       }
 
       if (commands.length === 0) {
         return buildResponse(400, { error: "No valid configuration fields provided." }, corsHeaders);
       }
 
-      await executeSsmShell(commands.join("; "), 1000);
-      return buildResponse(200, { ok: true, message: "Configuration parameters applied to Mindustry." }, corsHeaders);
+      await executeSsmShell(commands.join("; "), 1200);
+      return buildResponse(200, {
+        ok: true,
+        server: targetServer.id,
+        message: `Configuration parameters applied to ${targetServer.name}.`
+      }, corsHeaders);
     }
 
     // GET /api/mindustry/players or /api/admin/players
     if (method === "GET" && (path === "/api/mindustry/players" || path === "/api/admin/players")) {
-      const ec2Info = await getEc2InstanceInfo();
-      if (ec2Info.state !== "running") {
-        return buildResponse(200, { ok: true, players: [] }, corsHeaders);
+      const targetServer = resolveServer(query.server);
+      if (!targetServer) {
+        return buildResponse(400, { error: "Valid server parameter required." }, corsHeaders);
       }
 
+      const ec2Info = await getEc2InstanceInfo();
+      if (ec2Info.state !== "running") {
+        return buildResponse(200, { ok: true, server: targetServer.id, players: [] }, corsHeaders);
+      }
+
+      const fifo = getFifoCommandTemplate(targetServer.id);
       const ssmRes = await executeSsmShell(
-        `${FIFO_COMMAND_TEMPLATE} "echo 'players' > \\$FIFO"; sleep 0.5; journalctl -u mindustry.service -n 25 --no-pager`,
-        1000
+        `${fifo} "echo 'players' > \\$FIFO"; sleep 0.5; journalctl -u ${targetServer.service} -n 25 --no-pager`,
+        1200
       );
-      return buildResponse(200, { ok: true, raw: ssmRes.stdout || "", players: [] }, corsHeaders);
+
+      return buildResponse(200, {
+        ok: true,
+        server: targetServer.id,
+        raw: ssmRes.stdout || "",
+        players: []
+      }, corsHeaders);
     }
 
-    // POST Player Actions: /api/mindustry/players/action or /api/admin/players/:action
+    // POST Player Actions: /api/mindustry/players/action or /api/admin/players/action
     const isPlayerActionPath =
       path === "/api/mindustry/players/action" ||
+      path === "/api/admin/players/action" ||
       path === "/api/admin/players/kick" ||
       path === "/api/admin/players/ban" ||
       path === "/api/admin/players/unban";
 
     if (method === "POST" && isPlayerActionPath) {
+      const targetServer = resolveServer(body.server || body.serverId);
+      if (!targetServer) {
+        return buildResponse(400, { error: "Valid target server required." }, corsHeaders);
+      }
+
       const ec2Info = await getEc2InstanceInfo();
       if (ec2Info.state !== "running") {
         return buildResponse(400, { error: "EC2 instance is stopped." }, corsHeaders);
@@ -579,31 +809,53 @@ export const handler = async (event) => {
         return buildResponse(400, { error: "Action must be kick, ban, or unban." }, corsHeaders);
       }
 
-      const target = String(body.playerId || body.target || "").replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 64);
-      if (!target) {
+      const target = String(body.target || body.playerId || "").trim();
+      if (!target || !/^[a-zA-Z0-9.:_-]{1,64}$/.test(target)) {
         return buildResponse(400, { error: "Valid target player ID or IP required." }, corsHeaders);
       }
 
-      await executeSsmShell(`${FIFO_COMMAND_TEMPLATE} "echo '${action} ${target}' > \\$FIFO"`, 800);
-      return buildResponse(200, { ok: true, message: `Executed ${action} on player ${target}.` }, corsHeaders);
+      const fifo = getFifoCommandTemplate(targetServer.id);
+      await executeSsmShell(`${fifo} "echo '${action} ${target}' > \\$FIFO"`, 1000);
+
+      return buildResponse(200, {
+        ok: true,
+        server: targetServer.id,
+        message: `Executed ${action} on player ${target} for ${targetServer.name}.`
+      }, corsHeaders);
     }
 
     // GET /api/mindustry/logs or /api/admin/logs
     if (method === "GET" && (path === "/api/mindustry/logs" || path === "/api/admin/logs")) {
+      const targetServer = resolveServer(query.server) || CONTINENTAL_SERVERS.survival;
       const ec2Info = await getEc2InstanceInfo();
+
       if (ec2Info.state !== "running") {
-        return buildResponse(200, { ok: true, logs: ["EC2 instance is currently stopped. Logs unavailable."] }, corsHeaders);
+        return buildResponse(200, {
+          ok: true,
+          server: targetServer.id,
+          logs: [`EC2 instance is currently stopped. Logs unavailable for ${targetServer.service}.`]
+        }, corsHeaders);
       }
 
-      const limit = Math.min(200, Math.max(10, Number(event.queryStringParameters?.limit || 100)));
-      const ssmRes = await executeSsmShell(`journalctl -u mindustry.service -n ${limit} --no-pager`, 1500);
+      const limit = Math.min(100, Math.max(10, parseInt(query.lines, 10) || 50));
+      const ssmRes = await executeSsmShell(`journalctl -u ${targetServer.service} -n ${limit} --no-pager`, 1500);
       const lines = (ssmRes.stdout || "").split("\n").filter(Boolean);
 
-      return buildResponse(200, { ok: true, logs: lines }, corsHeaders);
+      return buildResponse(200, {
+        ok: true,
+        server: targetServer.id,
+        service: targetServer.service,
+        logs: lines
+      }, corsHeaders);
     }
 
     // POST Console: /api/mindustry/console or /api/admin/console/command
     if (method === "POST" && (path === "/api/mindustry/console" || path === "/api/admin/console/command")) {
+      const targetServer = resolveServer(body.server || body.serverId);
+      if (!targetServer) {
+        return buildResponse(400, { error: "Target server (survival, tower, attack) is required." }, corsHeaders);
+      }
+
       const ec2Info = await getEc2InstanceInfo();
       if (ec2Info.state !== "running") {
         return buildResponse(400, { error: "EC2 instance is stopped. Start server first." }, corsHeaders);
@@ -631,20 +883,20 @@ export const handler = async (event) => {
         cmdString += ` ${cleanArg}`;
       }
 
+      const fifo = getFifoCommandTemplate(targetServer.id);
       const ssmRes = await executeSsmShell(
-        `${FIFO_COMMAND_TEMPLATE} "echo '${cmdString}' > \\$FIFO"; sleep 0.5; journalctl -u mindustry.service -n 10 --no-pager`,
+        `${fifo} "echo '${cmdString}' > \\$FIFO"; sleep 0.5; journalctl -u ${targetServer.service} -n 10 --no-pager`,
         1200
       );
 
       return buildResponse(200, {
         ok: true,
+        server: targetServer.id,
         command: cmdString,
-        message: `Command sent to Mindustry console.`,
-        output: ssmRes.stdout || "Command dispatched."
+        output: ssmRes.stdout || "Command delivered to stdin FIFO."
       }, corsHeaders);
     }
   }
 
-  // Fallthrough 404
   return buildResponse(404, { error: `Endpoint not found: ${method} ${path}`, code: "NOT_FOUND" }, corsHeaders);
-};
+}

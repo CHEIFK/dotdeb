@@ -1,11 +1,8 @@
 import crypto from "node:crypto";
 
-const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production-zootopia-secret-key-32b";
+const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production-continental-secret-key-32b";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "chief";
-// Default scrypt hash for chief / chief100 with default salt
-const DEFAULT_CHIEF_HASH = "423d1916c88c4c504a354867012c11baa3f40b1701de3999003ee5253f8c2c19799a9e7a218c4ecdd0bb998b9fc0f6f6b9048b0d281ed30bb179893165edf665";
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || DEFAULT_CHIEF_HASH;
-const ADMIN_SALT = process.env.ADMIN_SALT || "zootopia_salt_2026";
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
 
 // Sliding window rate limiter for login attempts with memory leak protection
 const loginAttempts = new Map();
@@ -13,7 +10,11 @@ const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_STORED_IPS = 10000; // Bound memory to prevent exhaustion
 
-function pruneExpiredAttempts(now) {
+// Server-side session revocation store (revoked JTIs)
+const revokedSessions = new Map();
+
+function pruneExpiredRecords(now) {
+  // Prune login attempts
   if (loginAttempts.size > MAX_STORED_IPS) {
     for (const [key, record] of loginAttempts.entries()) {
       if (now > record.resetAt) {
@@ -21,10 +22,22 @@ function pruneExpiredAttempts(now) {
       }
     }
   }
+  // Prune revoked sessions
+  for (const [jti, exp] of revokedSessions.entries()) {
+    if (now > exp) {
+      revokedSessions.delete(jti);
+    }
+  }
 }
 
-export function hashPassword(plainPassword, salt = ADMIN_SALT) {
-  return crypto.scryptSync(plainPassword, salt, 64).toString("hex");
+/**
+ * Hashes a plain password with a cryptographically secure random salt.
+ * Returns format: "salt:hash"
+ */
+export function hashPassword(plainPassword, customSalt = null) {
+  const salt = customSalt || crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(plainPassword, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
 }
 
 export function checkRateLimit(ip) {
@@ -33,7 +46,7 @@ export function checkRateLimit(ip) {
   }
 
   const now = Date.now();
-  pruneExpiredAttempts(now);
+  pruneExpiredRecords(now);
 
   const record = loginAttempts.get(ip);
   if (!record || now > record.resetAt) {
@@ -66,36 +79,56 @@ export function resetAttempts(ip) {
   }
 }
 
+/**
+ * Verifies admin credentials.
+ * Supports "salt:hash" format.
+ * Never allows login if ADMIN_PASSWORD_HASH is unset in production.
+ */
 export function verifyCredentials(username, password) {
   if (typeof username !== "string" || typeof password !== "string") return false;
   if (username.trim() !== ADMIN_USERNAME) return false;
 
-  const expectedRaw = ADMIN_PASSWORD_HASH || DEFAULT_CHIEF_HASH;
-
-  let salt = ADMIN_SALT;
-  let expectedHash = expectedRaw;
-  if (expectedRaw.includes(":")) {
-    const parts = expectedRaw.split(":");
-    salt = parts[0];
-    expectedHash = parts[1];
+  // In test / non-Lambda development, fall back to a local testing hash if explicitly allowed
+  let expectedRaw = ADMIN_PASSWORD_HASH;
+  if (!expectedRaw) {
+    // If running in development/local test mode, allow checking with a local test hash
+    if (process.env.NODE_ENV === "test" || !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      // Local testing hash for chief / chief100
+      expectedRaw = "a4c28f11d95e427189b2713f01c2384a:579571667fa14b759d3b0e662dc2619b0b35c04f6a4cd6282fbdd2e2453dd64f238494ae2eb2760d2154b17406b05074f05cac7b8c269e8d5a7ad130cca589e3";
+    } else {
+      console.error("ADMIN_PASSWORD_HASH is not configured in production environment.");
+      return false;
+    }
   }
 
-  const inputHash = hashPassword(password, salt);
-  const bufInput = Buffer.from(inputHash, "utf-8");
-  const bufExpected = Buffer.from(expectedHash, "utf-8");
-
-  // Constant-time comparison with explicit length guard to avoid RangeError
-  if (bufInput.length !== bufExpected.length) {
+  if (!expectedRaw.includes(":")) {
+    console.error("Invalid ADMIN_PASSWORD_HASH format; must be 'salt:hash'.");
     return false;
   }
 
-  return crypto.timingSafeEqual(bufInput, bufExpected);
+  const [salt, expectedHash] = expectedRaw.split(":");
+  const calculatedHash = crypto.scryptSync(password, salt, 64).toString("hex");
+
+  const bufCalculated = Buffer.from(calculatedHash, "utf-8");
+  const bufExpected = Buffer.from(expectedHash, "utf-8");
+
+  if (bufCalculated.length !== bufExpected.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(bufCalculated, bufExpected);
 }
 
+/**
+ * Generates cryptographically secure 32-byte hex CSRF token
+ */
 export function generateCsrfToken() {
   return crypto.randomBytes(32).toString("hex");
 }
 
+/**
+ * Validates CSRF token with constant-time comparison
+ */
 export function verifyCsrfToken(headerToken, cookieToken) {
   if (!headerToken || !cookieToken) return false;
   if (typeof headerToken !== "string" || typeof cookieToken !== "string") return false;
@@ -103,23 +136,33 @@ export function verifyCsrfToken(headerToken, cookieToken) {
   const bufHeader = Buffer.from(headerToken, "utf-8");
   const bufCookie = Buffer.from(cookieToken, "utf-8");
 
-  if (bufHeader.length !== bufCookie.length) {
+  if (bufHeader.length !== bufCookie.length || bufHeader.length !== 64) {
     return false;
   }
 
   return crypto.timingSafeEqual(bufHeader, bufCookie);
 }
 
+/**
+ * Creates HMAC-SHA256 signed session token with unique JTI for server-side revocation
+ */
 export function createSessionToken(username) {
+  const jti = crypto.randomBytes(16).toString("hex");
+  const exp = Date.now() + 8 * 60 * 60 * 1000; // 8 hours
   const payload = {
     username,
-    exp: Date.now() + 8 * 60 * 60 * 1000 // 8 hours
+    jti,
+    iat: Date.now(),
+    exp
   };
   const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const hmac = crypto.createHmac("sha256", SESSION_SECRET).update(data).digest("base64url");
   return `${data}.${hmac}`;
 }
 
+/**
+ * Verifies HMAC signature, expiration, and ensures session has not been revoked server-side
+ */
 export function verifySessionToken(token) {
   if (!token || typeof token !== "string") return null;
   const parts = token.split(".");
@@ -131,7 +174,6 @@ export function verifySessionToken(token) {
   const bufSig = Buffer.from(signature);
   const bufExpected = Buffer.from(expectedHmac);
 
-  // Guard against RangeError before timingSafeEqual
   if (bufSig.length !== bufExpected.length) {
     return null;
   }
@@ -142,11 +184,34 @@ export function verifySessionToken(token) {
 
   try {
     const payload = JSON.parse(Buffer.from(data, "base64url").toString("utf-8"));
-    if (typeof payload.exp !== "number" || Date.now() > payload.exp) {
+    const now = Date.now();
+
+    if (typeof payload.exp !== "number" || now > payload.exp) {
       return null;
     }
+
+    // Check if session has been explicitly revoked
+    if (payload.jti && revokedSessions.has(payload.jti)) {
+      return null;
+    }
+
     return payload;
   } catch {
     return null;
   }
+}
+
+/**
+ * Revokes a session token on the server side
+ */
+export function revokeSession(token) {
+  if (!token || typeof token !== "string") return;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return;
+    const payload = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf-8"));
+    if (payload.jti && payload.exp) {
+      revokedSessions.set(payload.jti, payload.exp);
+    }
+  } catch {}
 }

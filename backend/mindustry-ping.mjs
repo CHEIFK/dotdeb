@@ -1,7 +1,7 @@
 import dgram from "node:dgram";
 
 /**
- * Pings a Mindustry server via UDP (default port 6567).
+ * Pings a Mindustry server via UDP.
  * Query packet sent: [0xFE, 0x01] (-2, 1)
  *
  * Arc / Mindustry binary response format:
@@ -16,7 +16,7 @@ import dgram from "node:dgram";
  * 9. Description: String
  * 10. Mode name: String (optional trailing string)
  */
-export function pingMindustryServer(host, port = 6567, timeoutMs = 2000) {
+export function pingMindustryServer(host, port = 6567, timeoutMs = 2000, fallbackName = "Continental Mindustry") {
   return new Promise((resolve) => {
     if (!host) {
       return resolve({ online: false, error: "No host provided" });
@@ -69,7 +69,7 @@ export function pingMindustryServer(host, port = 6567, timeoutMs = 2000) {
           return val;
         }
 
-        const serverName = readString() || "Zootopia";
+        const serverName = readString() || fallbackName;
         const map = readString() || "Glacier";
         const playersOnline = readInt32();
         const wave = readInt32();
@@ -100,7 +100,7 @@ export function pingMindustryServer(host, port = 6567, timeoutMs = 2000) {
         // Fallback with defaults if parsing failed on valid UDP reply
         safeResolve({
           online: true,
-          serverName: "Zootopia",
+          serverName: fallbackName,
           map: "Glacier",
           players: 0,
           playersOnline: 0,

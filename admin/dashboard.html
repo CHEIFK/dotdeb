@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Dashboard — Continental Mindustry Network | DOT • DEB</title>
+<meta name="description" content="Administrative control dashboard for Continental Mindustry multiplayer network.">
+<meta name="robots" content="noindex, nofollow">
+
+<!-- Theme Color for light/dark appearance -->
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101010" media="(prefers-color-scheme: dark)">
+
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../zootopia.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<div class="site admin-site">
+  <!-- Top Navigation -->
+  <nav class="admin-nav" aria-label="Admin navigation">
+    <div class="admin-nav-left">
+      <a class="back-link" href="../zootopia.html" title="Return to Continental overview">
+        <span>←</span> Continental Overview
+      </a>
+      <span class="brand-badge">Network Admin</span>
+    </div>
+
+    <div class="admin-nav-right">
+      <button id="theme" class="icon-button" type="button" title="Toggle appearance" aria-label="Toggle appearance">☼</button>
+      <button id="btn-signout" class="btn-signout" type="button" title="End administrative session">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- Notice when backend API is not yet connected -->
+  <div id="backend-notice" class="alert alert-info" style="display:none;margin-top:20px;" role="status"></div>
+
+  <!-- Dashboard Header -->
+  <header class="dashboard-header">
+    <div class="dashboard-title">
+      <span class="eyebrow">AWS EC2 · AP-SOUTHEAST-2 · 3 INDEPENDENT SERVERS</span>
+      <h1>Continental Network Dashboard</h1>
+      <p>Supervise and control the Continental Mindustry game servers (Survival, Tower Defence, Attack) and the host EC2 instance.</p>
+    </div>
+
+    <div>
+      <button id="dash-refresh-btn" class="refresh-btn" type="button">↻ Refresh Overview</button>
+    </div>
+  </header>
+
+  <!-- SERVER SELECTOR BAR -->
+  <section class="server-selector-bar" aria-label="Target Server Selector">
+    <span class="server-selector-label">Target Server:</span>
+    <button type="button" class="server-pick-btn active" data-server="survival" id="pick-survival">
+      <span>🛡️ Survival</span>
+      <span class="server-pick-port">:6567</span>
+    </button>
+    <button type="button" class="server-pick-btn" data-server="tower" id="pick-tower">
+      <span>🏰 Tower Defence</span>
+      <span class="server-pick-port">:6568</span>
+    </button>
+    <button type="button" class="server-pick-btn" data-server="attack" id="pick-attack">
+      <span>⚔️ Attack</span>
+      <span class="server-pick-port">:6569</span>
+    </button>
+    <button type="button" class="server-pick-btn" data-server="ec2" id="pick-ec2" style="margin-left:auto;">
+      <span>🖥️ Host EC2 (i-02de910a9f70196b4)</span>
+    </button>
+  </section>
+
+  <!-- Current Target Server Indicator -->
+  <div class="current-target-indicator" id="current-target-indicator">
+    <span>Active Target:</span>
+    <strong id="target-server-name">Continental Survival</strong>
+    <span style="opacity:.65;">·</span>
+    <code id="target-server-service" style="font-size:11px;background:var(--bg);padding:2px 6px;border-radius:4px;border:1px solid var(--line);">mindustry-survival.service</code>
+    <span style="opacity:.65;">·</span>
+    <span id="target-server-port" style="font-family:'Courier New',monospace;font-size:11px;">Port 6567</span>
+  </div>
+
+  <!-- Tab Navigation -->
+  <nav class="tabs-nav" aria-label="Dashboard sections">
+    <button class="tab-btn active" data-tab="overview">Server Overview</button>
+    <button class="tab-btn" data-tab="controls">Server Controls</button>
+    <button class="tab-btn" data-tab="config">Configuration</button>
+    <button class="tab-btn" data-tab="players">Player Management</button>
+    <button class="tab-btn" data-tab="console">Console &amp; Logs</button>
+  </nav>
+
+  <!-- TAB 1: SERVER OVERVIEW -->
+  <section id="panel-overview" class="tab-panel active" aria-labelledby="tab-overview">
+    <div class="metrics-row">
+      <article class="metric-card">
+        <span class="metric-label">Selected Server Status</span>
+        <div style="margin-top:4px;">
+          <div id="dash-status-pill" class="status-pill status-unknown">
+            <span class="status-dot"></span>
+            <span id="dash-status-text">Unknown</span>
+          </div>
+        </div>
+        <span class="metric-sub" id="dash-service-sub">mindustry-survival</span>
+      </article>
+
+      <article class="metric-card">
+        <span class="metric-label">Uptime</span>
+        <div class="metric-val" id="dash-uptime">—</div>
+        <span class="metric-sub">Host system uptime</span>
+      </article>
+
+      <article class="metric-card">
+        <span class="metric-label">Active Map</span>
+        <div class="metric-val" id="dash-map">—</div>
+        <span class="metric-sub">Current sector</span>
+      </article>
+
+      <article class="metric-card">
+        <span class="metric-label">Wave</span>
+        <div class="metric-val" id="dash-wave">—</div>
+        <span class="metric-sub">Defense round</span>
+      </article>
+
+      <article class="metric-card">
+        <span class="metric-label">Online Players</span>
+        <div class="metric-val" id="dash-players">— / 24</div>
+        <span class="metric-sub">Connected users</span>
+      </article>
+
+      <article class="metric-card">
+        <span class="metric-label">RAM Usage</span>
+        <div class="metric-val" id="dash-ram">—</div>
+        <span class="metric-sub">EC2 Host load</span>
+      </article>
+    </div>
+
+    <!-- Network Servers Status Table -->
+    <div class="panel-box" style="margin-top:24px;">
+      <div class="panel-header">
+        <h2>Continental Network — Server Status Overview</h2>
+        <span class="eyebrow">ALL THREE SERVERS</span>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Server</th>
+              <th>Port</th>
+              <th>Systemd Service</th>
+              <th>Status</th>
+              <th>Active Map</th>
+              <th>Wave</th>
+              <th>Players</th>
+              <th>Quick Action</th>
+            </tr>
+          </thead>
+          <tbody id="overview-all-servers-body">
+            <tr>
+              <td><strong>Continental Survival</strong></td>
+              <td><code>6567</code></td>
+              <td><code>mindustry-survival</code></td>
+              <td><span id="ov-status-survival" class="badge">Checking...</span></td>
+              <td id="ov-map-survival">—</td>
+              <td id="ov-wave-survival">—</td>
+              <td id="ov-players-survival">—</td>
+              <td><button type="button" class="btn-ctrl" onclick="window.switchTargetServer('survival')">Manage</button></td>
+            </tr>
+            <tr>
+              <td><strong>Continental Tower Defence</strong></td>
+              <td><code>6568</code></td>
+              <td><code>mindustry-tower</code></td>
+              <td><span id="ov-status-tower" class="badge">Checking...</span></td>
+              <td id="ov-map-tower">—</td>
+              <td id="ov-wave-tower">—</td>
+              <td id="ov-players-tower">—</td>
+              <td><button type="button" class="btn-ctrl" onclick="window.switchTargetServer('tower')">Manage</button></td>
+            </tr>
+            <tr>
+              <td><strong>Continental Attack</strong></td>
+              <td><code>6569</code></td>
+              <td><code>mindustry-attack</code></td>
+              <td><span id="ov-status-attack" class="badge">Checking...</span></td>
+              <td id="ov-map-attack">—</td>
+              <td id="ov-wave-attack">—</td>
+              <td id="ov-players-attack">—</td>
+              <td><button type="button" class="btn-ctrl" onclick="window.switchTargetServer('attack')">Manage</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Instance & Host Details -->
+    <div class="panel-box" style="margin-top:24px;">
+      <div class="panel-header">
+        <h2>Host &amp; Infrastructure Runtime</h2>
+        <span class="eyebrow">AWS EC2 · UBUNTU 26.04 LTS</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:16px;font-size:13px;">
+        <div>
+          <span style="color:var(--muted);display:block;font-size:11px;font-weight:800;text-transform:uppercase;">Instance Name</span>
+          <strong>mindustry server</strong>
+        </div>
+        <div>
+          <span style="color:var(--muted);display:block;font-size:11px;font-weight:800;text-transform:uppercase;">Instance ID</span>
+          <code>i-02de910a9f70196b4</code>
+        </div>
+        <div>
+          <span style="color:var(--muted);display:block;font-size:11px;font-weight:800;text-transform:uppercase;">Public IP</span>
+          <code id="host-ip-display">16.176.55.109</code>
+        </div>
+        <div>
+          <span style="color:var(--muted);display:block;font-size:11px;font-weight:800;text-transform:uppercase;">Instance Type</span>
+          <strong>t3.small (2 vCPU, 2 GiB RAM)</strong>
+        </div>
+        <div>
+          <span style="color:var(--muted);display:block;font-size:11px;font-weight:800;text-transform:uppercase;">Java Runtime</span>
+          <strong>OpenJDK 21</strong>
+        </div>
+        <div>
+          <span style="color:var(--muted);display:block;font-size:11px;font-weight:800;text-transform:uppercase;">Assigned Ports</span>
+          <code>6567 (Survival) · 6568 (Tower) · 6569 (Attack)</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: SERVER CONTROLS -->
+  <section id="panel-controls" class="tab-panel" aria-labelledby="tab-controls">
+    <div class="panel-box">
+      <div class="panel-header">
+        <h2 id="controls-section-title">Service Controls — Continental Survival</h2>
+        <span class="eyebrow" id="controls-section-eyebrow">TARGET: MINDUSTRY-SURVIVAL</span>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin-top:0;">
+        Actions in this section strictly target <strong id="controls-target-name">Continental Survival</strong>. The other two servers are completely isolated and will not be interrupted.
+      </p>
+
+      <div class="controls-grid">
+        <div class="ctrl-card">
+          <h3>Start Service</h3>
+          <p>Boot the Mindustry daemon for the selected server.</p>
+          <button type="button" id="ctrl-start" class="btn-ctrl btn-start">▶ Start Service</button>
+        </div>
+
+        <div class="ctrl-card">
+          <h3>Restart Service</h3>
+          <p>Gracefully save world and restart the selected server process.</p>
+          <button type="button" id="ctrl-restart" class="btn-ctrl btn-restart">↻ Restart Service</button>
+        </div>
+
+        <div class="ctrl-card">
+          <h3>Stop Service</h3>
+          <p>Save game progress and halt the selected server daemon.</p>
+          <button type="button" id="ctrl-stop" class="btn-ctrl btn-stop">■ Stop Service</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Host EC2 Machine Power Controls -->
+    <div class="panel-box" style="margin-top:28px;">
+      <div class="panel-header">
+        <h2>Host Machine Power (AWS EC2 Instance)</h2>
+        <span class="eyebrow">INSTANCE-LEVEL LIFECYCLE</span>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin-top:0;">
+        Controls the physical EC2 virtual machine hosting all three servers. If EC2 is stopped, click Start EC2 to power it on.
+      </p>
+
+      <div class="controls-grid">
+        <div class="ctrl-card">
+          <h3>Power On EC2 Host</h3>
+          <p>Calls <code>ec2:StartInstances</code> to boot the virtual machine when stopped.</p>
+          <button type="button" id="ctrl-ec2-start" class="btn-ctrl btn-start">⚡ Power On EC2</button>
+        </div>
+
+        <div class="ctrl-card">
+          <h3>Power Off EC2 Host</h3>
+          <p>Saves all 3 active worlds cleanly, then calls <code>ec2:StopInstances</code>.</p>
+          <button type="button" id="ctrl-ec2-stop" class="btn-ctrl btn-stop">⛔ Power Off EC2</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 3: CONFIGURATION -->
+  <section id="panel-config" class="tab-panel" aria-labelledby="tab-config">
+    <div class="panel-box">
+      <div class="panel-header">
+        <h2 id="config-section-title">Configuration — Continental Survival</h2>
+        <span class="eyebrow" id="config-section-eyebrow">TARGET: MINDUSTRY-SURVIVAL</span>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin-top:0;">
+        Settings applied here are delivered via FIFO to <strong id="config-target-name">Continental Survival</strong> only.
+      </p>
+
+      <form id="server-config-form" novalidate>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="cfg-server-name">Server Broadcast Name</label>
+            <input type="text" id="cfg-server-name" class="form-input" value="Continental Survival" required maxlength="48">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfg-player-limit">Player Limit</label>
+            <input type="number" id="cfg-player-limit" class="form-input" value="24" min="2" max="64" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfg-motd">Server Description / MOTD</label>
+            <input type="text" id="cfg-motd" class="form-input" placeholder="Cooperative survival, build and defend!" maxlength="100">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cfg-map">Active Map</label>
+            <input type="text" id="cfg-map" class="form-input" value="Glacier" placeholder="Glacier" maxlength="32">
+          </div>
+        </div>
+
+        <div style="margin-top:20px;display:flex;justify-content:flex-end;">
+          <button type="submit" id="btn-save-cfg" class="btn-ctrl btn-start" style="padding:10px 24px;">
+            Save Target Configuration
+          </button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- TAB 4: PLAYER MANAGEMENT -->
+  <section id="panel-players" class="tab-panel" aria-labelledby="tab-players">
+    <div class="panel-box">
+      <div class="panel-header">
+        <h2 id="players-section-title">Player Supervision — Continental Survival</h2>
+        <span class="eyebrow" id="players-section-eyebrow">PORT 6567</span>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Player Name</th>
+              <th>ID / IP</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="players-table-body">
+            <tr>
+              <td colspan="4" style="text-align:center;color:var(--muted);padding:32px;">
+                No players currently connected to this server.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:28px;border-top:1px solid var(--soft);padding-top:20px;">
+        <h3 style="margin:0 0 10px;font-size:16px;">Manual Unban</h3>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">Remove a player ID or IP from the server blacklist.</p>
+        <div style="display:flex;gap:10px;max-width:440px;">
+          <input type="text" id="unban-player-id" class="form-input" placeholder="Player ID or IP address">
+          <button type="button" id="btn-unban-action" class="btn-ctrl" style="white-space:nowrap;">Unban Player</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 5: CONSOLE & LOGS -->
+  <section id="panel-console" class="tab-panel" aria-labelledby="tab-console">
+    <div class="panel-box">
+      <div class="panel-header">
+        <h2 id="console-section-title">Console &amp; Journald Stream — Continental Survival</h2>
+        <span class="eyebrow" id="console-section-eyebrow">STDIN FIFO</span>
+      </div>
+
+      <!-- Quick Command Chips -->
+      <div style="margin-bottom:12px;">
+        <span style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:1px;display:block;margin-bottom:6px;">
+          Allowlisted Quick Commands (Targeted to Selected Server)
+        </span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="chip-btn" data-cmd="status">status</button>
+          <button type="button" class="chip-btn" data-cmd="players">players</button>
+          <button type="button" class="chip-btn" data-cmd="maps">maps</button>
+          <button type="button" class="chip-btn" data-cmd="waves">waves</button>
+          <button type="button" class="chip-btn" data-cmd="pause">pause</button>
+          <button type="button" class="chip-btn" data-cmd="resume">resume</button>
+          <button type="button" class="chip-btn" data-cmd="save">save</button>
+          <button type="button" class="chip-btn" data-cmd="nextmap">nextmap</button>
+        </div>
+      </div>
+
+      <!-- Terminal Output Screen -->
+      <pre id="console-output" class="console-screen" aria-live="polite" role="log">[System] Ready. Selected target: Continental Survival (Port 6567).
+Commands entered here are sanitized and sent strictly to mindustry-survival.fifo.</pre>
+
+      <!-- Command Input -->
+      <form id="console-form" style="display:flex;gap:10px;margin-top:12px;">
+        <input type="text" id="console-input" class="form-input" placeholder="Type allowlisted Mindustry command (e.g. status, say Hello, waves)..." autocomplete="off" spellcheck="false">
+        <button type="submit" id="console-send-btn" class="btn-ctrl btn-start" style="white-space:nowrap;padding:0 20px;">Send</button>
+      </form>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12px;color:var(--muted);">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="console-autoscroll" checked> Auto-scroll output
+        </label>
+        <div>
+          <button type="button" id="console-refresh-logs-btn" class="btn-ctrl" style="font-size:11px;padding:4px 10px;">Fetch Latest Logs</button>
+          <button type="button" id="console-clear-btn" class="btn-ctrl" style="font-size:11px;padding:4px 10px;margin-left:6px;">Clear Console</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Confirmation Modal Dialog -->
+<div id="confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="modal-title">Confirm Action</h3>
+      <p id="modal-desc" style="color:var(--muted);font-size:14px;line-height:1.45;margin:0;"></p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" id="modal-btn-cancel" class="btn-ctrl">Cancel</button>
+      <button type="button" id="modal-btn-confirm" class="btn-ctrl">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Banner -->
+<div id="admin-toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="../config.js"></script>
+<script src="admin-api.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

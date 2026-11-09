@@ -110,6 +110,10 @@ button{cursor:pointer}
   display:block;margin-top:11px;font-family:Arial,sans-serif;font-size:9px;
   letter-spacing:1.35px;text-transform:uppercase;font-weight:900;opacity:.65
 }
+.card .desc{
+  display:block;margin-top:6px;font-family:Arial,sans-serif;font-size:10.5px;
+  line-height:1.35;font-weight:500;letter-spacing:.2px;text-transform:none;opacity:.82
+}
 .badge{
   position:absolute;z-index:5;left:12px;top:11px;padding:4px 7px;border:1px solid currentColor;
   border-radius:999px;font-size:8px;letter-spacing:1px;text-transform:uppercase;font-weight:900;
@@ -131,7 +135,7 @@ footer{padding:42px 0 28px;color:var(--muted);font-size:10px;letter-spacing:.7px
 
 /* Artwork */
 .wiki{--card-bg:#fffdf5}.wiki .art{background:url("./assets/Osho_talk.png") center/cover no-repeat}.wiki .card-content{display:none}
-.camp{--card-bg:#a9dfd2}.camp .art{background:linear-gradient(#a9dfd2 0 60%,#77b653 61%)}.camp .art:before{content:"";position:absolute;width:210px;height:100px;left:27%;bottom:-55px;border-radius:50%;background:#5da34c;box-shadow:-170px 20px 0 18px #65aa50,180px 15px 0 20px #6caf51}.camp .art:after{content:"";position:absolute;width:35px;height:35px;right:15%;top:18%;border-radius:50%;background:#ff8b35}
+.mindustry{--card-bg:#151821}.mindustry .art{background:radial-gradient(circle at 85% 20%,rgba(217,119,54,.45) 0%,transparent 45%),radial-gradient(circle at 15% 85%,rgba(141,161,227,.3) 0%,transparent 45%),linear-gradient(135deg,#181b24 0%,#0e1017 100%)}.mindustry .art:before{content:"";position:absolute;width:130px;height:130px;right:-20px;top:-20px;border-radius:24px;border:3px solid rgba(217,119,54,.6);background:repeating-linear-gradient(45deg,rgba(217,119,54,.15) 0 6px,transparent 6px 14px);transform:rotate(24deg);box-shadow:0 0 25px rgba(217,119,54,.25)}.mindustry .art:after{content:"";position:absolute;width:95px;height:95px;left:-15px;bottom:-25px;border-radius:18px;border:2px dashed rgba(141,161,227,.45);background:radial-gradient(circle,rgba(141,161,227,.2) 20%,transparent 70%);transform:rotate(-18deg)}
 .sandbox{--card-bg:#0b0b0b}.sandbox .art{background:linear-gradient(#0c0c0c 0 67%,#76401d 68% 80%,#b76222 81% 89%,#f5a516 90% 93%,#111 94%)}.sandbox .art:before{content:"";position:absolute;inset:8% 0 auto;height:8px;background:repeating-linear-gradient(90deg,transparent 0 24px,#83a5c1 25px 33px,transparent 34px 72px)}
 .constellation{--card-bg:#050810}.constellation .art{background-image:radial-gradient(circle,#fff 0 1.3px,transparent 2px),radial-gradient(circle,#9ed1ff 0 1px,transparent 2px);background-size:90px 65px,130px 90px}.constellation .art:before{content:"";position:absolute;width:150px;height:90px;left:8%;top:15%;border:1px solid #d3b7ff;clip-path:polygon(0 30%,35% 0,100% 35%,55% 100%,18% 75%)}.constellation .art:after{content:"";position:absolute;width:130px;height:75px;right:7%;bottom:9%;border:1px solid #9ce4ff;clip-path:polygon(0 20%,70% 0,100% 85%,35% 100%)}
 .life{--card-bg:#f3ecd7}.life .art{background:linear-gradient(135deg,#f3ecd7,#fbf7e9)}.life .art:before{content:"";position:absolute;width:110px;height:110px;left:-20px;bottom:-45px;border-radius:50%;background:#a84e32;box-shadow:0 0 0 15px rgba(168,78,50,.12)}.life .art:after{content:"";position:absolute;width:55px;height:80px;right:7%;top:-4px;background:repeating-linear-gradient(60deg,#67805b 0 3px,transparent 4px 12px);transform:rotate(20deg)}

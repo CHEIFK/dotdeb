@@ -1,6 +1,6 @@
 const projects=[
  {title:"Osho Talks",desc:"A quiet collection of timeless talks worth discovering.",cat:"Podcasts",className:"wiki",font:"serif",fg:"#111",href:"./osho_talks/"},
- {title:"Cursor Camp",desc:"A tiny creative game for messing around with your cursor.",cat:"Game",className:"camp",font:"sans",fg:"#111",href:"#"},
+ {title:"CONTINENTAL NETWORK",subtitle:"MINDUSTRY · 3 Dedicated Servers",desc:"Multiplayer Survival, Tower Defence, and Attack worlds. Build, defend, and conquer together.",cat:"Game",className:"mindustry",font:"bold",fg:"#f5ede3",href:"zootopia.html"},
  {title:"Sandboxels",desc:"A playful sandbox where everything interacts with everything.",cat:"Sandbox",className:"sandbox",font:"mono",fg:"#fff",href:"#"},
  {title:"Manhwa",desc:"Read manhwa and discover new stories.",cat:"Creative",className:"constellation",font:"sans",fg:"#fff",href:"/manwa/"},
  {title:"Size of Life",desc:"Explore a strange journey through the scales of the world.",cat:"Experiment",className:"life",font:"serif",fg:"#111",href:"#"},
@@ -40,7 +40,9 @@ function render(list=filtered()){
    a.style.setProperty("--card-fg",p.fg);
    a.style.setProperty("--tilt",`${i%2?-0.18:0.18}deg`);
    a.style.animationDelay=`${Math.min(i*35,350)}ms`;
-   a.innerHTML=`<div class="art"></div><span class="badge">${p.cat}</span><button class="fav" aria-label="Favorite ${p.title}" type="button">♡</button><div class="card-content"><div class="title">${p.title}<span class="subtitle">${p.desc}</span></div></div>`;
+   const subHtml = p.subtitle ? `<span class="subtitle">${p.subtitle}</span>` : '';
+   const descHtml = `<span class="${p.subtitle ? 'desc' : 'subtitle'}">${p.desc}</span>`;
+   a.innerHTML=`<div class="art"></div><span class="badge">${p.cat}</span><button class="fav" aria-label="Favorite ${p.title}" type="button">♡</button><div class="card-content"><div class="title">${p.title}${subHtml}${descHtml}</div></div>`;
    const fav=a.querySelector(".fav");
    if(localStorage.getItem("fav:"+p.title)==="1"){fav.textContent="♥";fav.classList.add("active")}
    fav.onclick=e=>{e.preventDefault();e.stopPropagation();const on=fav.classList.toggle("active");fav.textContent=on?"♥":"♡";localStorage.setItem("fav:"+p.title,on?"1":"0")};
