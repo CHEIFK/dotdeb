@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Zootopia Mindustry Server Management Backend
+  AWS API Gateway HTTP API + Lambda + Systems Manager / EC2 integration
+
+Parameters:
+  Ec2InstanceId:
+    Type: String
+    Default: 'i-02de910a9f70196b4'
+    Description: EC2 Instance ID of the Mindustry Server
+
+  AdminUsername:
+    Type: String
+    Default: 'admin'
+    Description: Username for admin management login
+
+  AdminPasswordHash:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Scrypt hex hash of the admin password (leave empty to use setup default)
+
+  SessionSecret:
+    Type: String
+    NoEcho: true
+    Default: 'change-me-in-production-zootopia-secret-key-32b'
+    Description: Secret key used to sign HMAC-SHA256 session cookies
+
+Resources:
+  # IAM Execution Role for Lambda (Least-Privilege)
+  ZootopiaLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ZootopiaBackendLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ZootopiaEc2AndSsmLeastPrivilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InspectMindustryInstance
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                Resource: '*'
+              - Sid: ManageMindustryInstanceLifecycle
+                Effect: Allow
+                Action:
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                  - ec2:RebootInstances
+                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2InstanceId}'
+              - Sid: ExecuteAllowlistedSSMCommands
+                Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                  - ssm:GetCommandInvocation
+                Resource:
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2InstanceId}'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*'
+
+  # AWS Lambda Function
+  ZootopiaApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: zootopia-backend-api
+      Runtime: nodejs20.x
+      Handler: index.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt ZootopiaLambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          EC2_INSTANCE_ID: !Ref Ec2InstanceId
+          ADMIN_USERNAME: !Ref AdminUsername
+          ADMIN_PASSWORD_HASH: !Ref AdminPasswordHash
+          SESSION_SECRET: !Ref SessionSecret
+      Events:
+        HttpApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ZootopiaHttpApi
+            Path: /{proxy+}
+            Method: ANY
+        HttpApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ZootopiaHttpApi
+            Path: /
+            Method: ANY
+
+  # HTTP API Gateway (v2) with CORS configuration
+  ZootopiaHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: zootopia-management-api
+      CorsConfiguration:
+        AllowOrigins:
+          - 'https://dotdeb.dpdns.org'
+          - 'http://localhost:8080'
+          - 'http://127.0.0.1:8080'
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - X-CSRF-Token
+          - Authorization
+        AllowCredentials: true
+        MaxAge: 86400
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTP API Default Endpoint URL
+    Value: !Sub 'https://${ZootopiaHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+  LambdaFunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt ZootopiaApiFunction.Arn
+  ExecutionRoleArn:
+    Description: IAM Role ARN
+    Value: !GetAtt ZootopiaLambdaExecutionRole.Arn
