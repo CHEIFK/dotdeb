@@ -12,14 +12,14 @@ Parameters:
 
   AdminUsername:
     Type: String
-    Default: 'admin'
+    Default: 'chief'
     Description: Username for admin management login
 
   AdminPasswordHash:
     Type: String
     NoEcho: true
-    Default: ''
-    Description: Scrypt hex hash of the admin password (leave empty to use setup default)
+    Default: '423d1916c88c4c504a354867012c11baa3f40b1701de3999003ee5253f8c2c19799a9e7a218c4ecdd0bb998b9fc0f6f6b9048b0d281ed30bb179893165edf665'
+    Description: Scrypt hex hash of the admin password (configured for chief / chief100)
 
   SessionSecret:
     Type: String
@@ -58,17 +58,26 @@ Resources:
                 Action:
                   - ec2:StartInstances
                   - ec2:StopInstances
-                  - ec2:RebootInstances
                 Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2InstanceId}'
-              - Sid: ExecuteAllowlistedSSMCommands
+              - Sid: SendSSMCommandsToMindustryInstance
                 Effect: Allow
                 Action:
                   - ssm:SendCommand
-                  - ssm:GetCommandInvocation
                 Resource:
                   - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2InstanceId}'
                   - !Sub 'arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript'
-                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*'
+              - Sid: TrackSSMCommandInvocations
+                Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*'
+
+  # CloudWatch Log Group with 14-day cost retention
+  ZootopiaApiFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/zootopia-backend-api'
+      RetentionInDays: 14
 
   # AWS Lambda Function
   ZootopiaApiFunction:
