@@ -276,8 +276,8 @@ export async function handler(event) {
     const host = ec2Info.publicIp || DEFAULT_HOST;
     const requestedServer = query.server ? resolveServer(query.server) : null;
 
-    // If EC2 is stopped or not running, report all three servers as Offline immediately
-    if (!ec2Info.found || ec2Info.state !== "running") {
+    // If EC2 is confirmed stopped or stopping, report all three servers as Offline immediately
+    if (ec2Info.found && (ec2Info.state === "stopped" || ec2Info.state === "stopping")) {
       const offlineServers = {};
       for (const [key, srv] of Object.entries(CONTINENTAL_SERVERS)) {
         offlineServers[key] = {
@@ -370,11 +370,13 @@ export async function handler(event) {
     };
 
     const anyOnline = Object.values(liveServers).some((s) => s.online);
+    const resolvedEc2State = anyOnline ? (ec2Info.state === "unknown" ? "running" : ec2Info.state) : ec2Info.state;
+    const networkStatus = anyOnline ? "Online" : (!ec2Info.found && ec2Info.state === "unknown" ? "Unknown" : "Offline");
 
     const responsePayload = {
       online: anyOnline,
-      status: anyOnline ? "Online" : "Offline",
-      ec2State: ec2Info.state,
+      status: networkStatus,
+      ec2State: resolvedEc2State,
       host,
       network: "Continental Mindustry Network",
       checkedAt: new Date().toISOString(),

@@ -69,7 +69,8 @@ export function pingMindustryServer(host, port = 6567, timeoutMs = 2000, fallbac
           return val;
         }
 
-        const serverName = readString() || fallbackName;
+        const rawName = readString();
+        const serverName = rawName ? rawName.replace(/\[.*?\]/g, "").trim() : fallbackName;
         const map = readString() || "Glacier";
         const playersOnline = readInt32();
         const wave = readInt32();

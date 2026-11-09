@@ -214,7 +214,8 @@
           setServerState(id, true, srvData);
           anyOnline = true;
         } else {
-          setServerState(id, false, srvData || {});
+          const isUnknown = (json.status === "Unknown" || json.ec2State === "unknown") && (!srvData || srvData.status === "Unknown");
+          setServerState(id, false, isUnknown ? null : (srvData || {}));
         }
       });
 
@@ -222,6 +223,9 @@
         if (anyOnline) {
           elNetworkPill.className = "status-pill status-online";
           if (elNetworkText) elNetworkText.textContent = "Network Active";
+        } else if (json.status === "Unknown" || json.ec2State === "unknown") {
+          elNetworkPill.className = "status-pill status-unknown";
+          if (elNetworkText) elNetworkText.textContent = "Status Unknown";
         } else {
           elNetworkPill.className = "status-pill status-offline";
           if (elNetworkText) elNetworkText.textContent = "All Servers Offline";
