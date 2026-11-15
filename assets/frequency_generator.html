@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rapid Frequency Generator</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --surface: #13161b;
+      --surface-elevated: #1b2028;
+      --border: #262c36;
+      --border-focus: #3b82f6;
+      --text: #f3f4f6;
+      --text-muted: #8b95a5;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --active-green: #10b981;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --radius-lg: 20px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      min-height: 100vh;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      line-height: 1.5;
+    }
+
+    .generator-card {
+      width: 100%;
+      max-width: 460px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* Header & Status */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+
+    .status-badge.running {
+      color: var(--active-green);
+      border-color: rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .status-badge.running .status-dot {
+      background: var(--active-green);
+      box-shadow: 0 0 8px var(--active-green);
+    }
+
+    /* Prominent Display */
+    .display-panel {
+      position: relative;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 22px 20px 18px;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .waveform-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0.22;
+      pointer-events: none;
+    }
+
+    .readout-row {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .freq-value {
+      font-family: var(--font-mono);
+      font-size: clamp(2.25rem, 8vw, 3.25rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    .freq-unit {
+      font-family: var(--font-mono);
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .sub-readout {
+      position: relative;
+      z-index: 1;
+      margin-top: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    /* Unit Switcher (Hz / kHz / MHz) */
+    .segmented-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      background: var(--bg);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      gap: 4px;
+    }
+
+    .seg-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      padding: 8px 0;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .seg-btn:hover {
+      color: var(--text);
+    }
+
+    .seg-btn.active {
+      background: var(--surface-elevated);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Rapid + / - & Direct Input Row */
+    .adjust-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 60px;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .step-btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--surface-elevated);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 1.65rem;
+      font-weight: 500;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+    }
+
+    .step-btn:hover {
+      background: #232a35;
+      border-color: #384152;
+    }
+
+    .step-btn:active {
+      transform: scale(0.96);
+      border-color: var(--accent);
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      transition: border-color 0.15s ease;
+    }
+
+    .input-wrapper:focus-within {
+      border-color: var(--border-focus);
+    }
+
+    .direct-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 1.125rem;
+      font-weight: 600;
+      padding: 14px 48px 14px 14px;
+      text-align: center;
+      outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .direct-input::-webkit-outer-spin-button,
+    .direct-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .direct-input[type="number"] {
+      -moz-appearance: textfield;
+    }
+
+    .input-unit-tag {
+      position: absolute;
+      right: 12px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Step Size & Slider */
+    .control-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .step-pills {
+      display: flex;
+      gap: 4px;
+    }
+
+    .step-pill {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .step-pill:hover {
+      color: var(--text);
+    }
+
+    .step-pill.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .range-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .range-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--text);
+      cursor: pointer;
+      transition: transform 0.12s ease;
+    }
+
+    .range-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.12);
+    }
+
+    .range-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--text);
+      cursor: pointer;
+    }
+
+    /* Waveform & Volume Bar */
+    .secondary-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .control-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .wave-select {
+      background: transparent;
+      color: var(--text);
+      border: none;
+      font-family: var(--font-sans);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+      text-align: right;
+    }
+
+    .wave-select option {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    .vol-slider {
+      width: 78px;
+      height: 4px;
+    }
+
+    /* Start, Stop, Reset Controls */
+    .transport-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+    }
+
+    .action-btn {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      font-family: var(--font-sans);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      padding: 13px 18px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-start {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .btn-start:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-stop {
+      background: var(--surface-elevated);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .btn-stop:hover:not(:disabled) {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: #ffffff;
+    }
+
+    .btn-reset {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text-muted);
+      padding: 13px 16px;
+    }
+
+    .btn-reset:hover {
+      color: var(--text);
+      border-color: #384152;
+      background: var(--surface-elevated);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .hint-bar {
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      opacity: 0.75;
+    }
+
+    @media (max-width: 420px) {
+      .generator-card {
+        padding: 20px;
+        gap: 18px;
+      }
+      .secondary-controls {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .simple-mode-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .simple-mode-btn:hover {
+      color: var(--text);
+      background: var(--surface-elevated);
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <a href="frequency-generator-simle.html" class="simple-mode-btn">Simple Mode</a>
+  <main class="generator-card" aria-label="Rapid Frequency Generator">
+    <!-- Top Header -->
+    <header class="header">
+      <span class="title">Frequency Generator</span>
+      <div id="statusBadge" class="status-badge" role="status" aria-live="polite">
+        <span class="status-dot"></span>
+        <span id="statusText">Stopped</span>
+      </div>
+    </header>
+
+    <!-- Prominent Frequency Display -->
+    <section class="display-panel" aria-label="Current Frequency Display">
+      <canvas id="waveCanvas" class="waveform-canvas"></canvas>
+      <div class="readout-row">
+        <span id="freqReadout" class="freq-value">440</span>
+        <span id="unitReadout" class="freq-unit">Hz</span>
+      </div>
+      <div class="sub-readout">
+        <span id="rawHzReadout">440.00 Hz</span>
+        <span>•</span>
+        <span id="periodReadout">T = 2.27 ms</span>
+      </div>
+    </section>
+
+    <!-- Unit Selector: Hz, kHz, MHz -->
+    <div class="segmented-group" role="group" aria-label="Frequency Unit">
+      <button type="button" class="seg-btn active" data-unit="Hz">Hz</button>
+      <button type="button" class="seg-btn" data-unit="kHz">kHz</button>
+      <button type="button" class="seg-btn" data-unit="MHz">MHz</button>
+    </div>
+
+    <!-- Rapid - / Direct Input / + Controls -->
+    <div class="adjust-row">
+      <button
+        type="button"
+        id="btnDecrement"
+        class="step-btn"
+        aria-label="Decrease Frequency"
+        title="Decrease Frequency (Hold for rapid decrease)"
+      >−</button>
+
+      <div class="input-wrapper">
+        <input
+          type="number"
+          id="freqInput"
+          class="direct-input"
+          value="440"
+          min="0.01"
+          max="1000000"
+          step="any"
+          aria-label="Direct Frequency Input"
+        />
+        <span id="inputUnitTag" class="input-unit-tag">Hz</span>
+      </div>
+
+      <button
+        type="button"
+        id="btnIncrement"
+        class="step-btn"
+        aria-label="Increase Frequency"
+        title="Increase Frequency (Hold for rapid increase)"
+      >+</button>
+    </div>
+
+    <!-- Step Size Selector & Smooth Sweep Slider -->
+    <div>
+      <div class="control-meta" style="margin-bottom: 8px;">
+        <span>Step Size</span>
+        <div class="step-pills" role="group" aria-label="Increment Step Size">
+          <button type="button" class="step-pill" data-step="0.1">0.1</button>
+          <button type="button" class="step-pill" data-step="1">1</button>
+          <button type="button" class="step-pill active" data-step="10">10</button>
+          <button type="button" class="step-pill" data-step="100">100</button>
+        </div>
+      </div>
+      <input
+        type="range"
+        id="freqSlider"
+        class="range-slider"
+        min="0"
+        max="1000"
+        value="440"
+        step="0.1"
+        aria-label="Frequency Sweep Slider"
+      />
+    </div>
+
+    <!-- Minimal Waveform & Volume Controls -->
+    <div class="secondary-controls">
+      <div class="control-box">
+        <label for="waveSelect" class="control-label">Wave</label>
+        <select id="waveSelect" class="wave-select" aria-label="Waveform Type">
+          <option value="sine">Sine</option>
+          <option value="square">Square</option>
+          <option value="triangle">Triangle</option>
+          <option value="sawtooth">Sawtooth</option>
+        </select>
+      </div>
+      <div class="control-box">
+        <label for="volumeSlider" class="control-label">Level</label>
+        <input
+          type="range"
+          id="volumeSlider"
+          class="range-slider vol-slider"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0.35"
+          aria-label="Output Level"
+        />
+      </div>
+    </div>
+
+    <!-- Start, Stop, Reset Buttons -->
+    <div class="transport-row">
+      <button type="button" id="btnStart" class="action-btn btn-start">
+        Start
+      </button>
+      <button type="button" id="btnStop" class="action-btn btn-stop" disabled>
+        Stop
+      </button>
+      <button type="button" id="btnReset" class="action-btn btn-reset" title="Reset to 440 Hz">
+        Reset
+      </button>
+    </div>
+
+    <p class="hint-bar">Hold + or − for rapid sweep • Space: Start/Stop • R: Reset</p>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      // Unit multipliers & bounds in current unit
+      const UNIT_CONFIG = {
+        Hz:  { factor: 1,         min: 0.1,  max: 20000, defaultStep: 10 },
+        kHz: { factor: 1e3,       min: 0.01, max: 1000,  defaultStep: 1 },
+        MHz: { factor: 1e6,       min: 0.01, max: 100,   defaultStep: 0.1 }
+      };
+
+      const DEFAULT_FREQ_HZ = 440;
+
+      // Generator State
+      const state = {
+        freqInUnit: 440,
+        unit: "Hz",
+        step: 10,
+        waveform: "sine",
+        volume: 0.35,
+        isRunning: false
+      };
+
+      // Web Audio API nodes
+      let audioCtx = null;
+      let oscillator = null;
+      let gainNode = null;
+
+      // Hold-to-repeat timers
+      let holdTimeout = null;
+      let holdInterval = null;
+      let holdTicks = 0;
+
+      // DOM Elements
+      const freqReadout = document.getElementById("freqReadout");
+      const unitReadout = document.getElementById("unitReadout");
+      const rawHzReadout = document.getElementById("rawHzReadout");
+      const periodReadout = document.getElementById("periodReadout");
+      const freqInput = document.getElementById("freqInput");
+      const inputUnitTag = document.getElementById("inputUnitTag");
+      const freqSlider = document.getElementById("freqSlider");
+      const btnDecrement = document.getElementById("btnDecrement");
+      const btnIncrement = document.getElementById("btnIncrement");
+      const btnStart = document.getElementById("btnStart");
+      const btnStop = document.getElementById("btnStop");
+      const btnReset = document.getElementById("btnReset");
+      const statusBadge = document.getElementById("statusBadge");
+      const statusText = document.getElementById("statusText");
+      const waveSelect = document.getElementById("waveSelect");
+      const volumeSlider = document.getElementById("volumeSlider");
+      const unitButtons = document.querySelectorAll(".seg-btn");
+      const stepPills = document.querySelectorAll(".step-pill");
+      const waveCanvas = document.getElementById("waveCanvas");
+      const ctx = waveCanvas.getContext("2d");
+
+      // Compute absolute frequency in Hz
+      function getFrequencyHz() {
+        return state.freqInUnit * UNIT_CONFIG[state.unit].factor;
+      }
+
+      // Format number cleanly without trailing float noise
+      function formatNumber(val) {
+        if (!Number.isFinite(val)) return "0";
+        const rounded = Math.round(val * 10000) / 10000;
+        return rounded.toString();
+      }
+
+      // Format period T (1 / f)
+      function formatPeriod(hz) {
+        if (hz <= 0) return "T = ∞";
+        const sec = 1 / hz;
+        if (sec >= 1) return "T = " + sec.toFixed(2) + " s";
+        if (sec >= 1e-3) return "T = " + (sec * 1e3).toFixed(2) + " ms";
+        if (sec >= 1e-6) return "T = " + (sec * 1e6).toFixed(2) + " µs";
+        return "T = " + (sec * 1e9).toFixed(2) + " ns";
+      }
+
+      // Format secondary raw Hz readout
+      function formatRawHz(hz) {
+        if (hz >= 1e6) {
+          return (hz / 1e6).toFixed(3) + " MHz (" + Math.round(hz).toLocaleString() + " Hz)";
+        }
+        if (hz >= 1e3) {
+          return hz.toLocaleString(undefined, { maximumFractionDigits: 2 }) + " Hz";
+        }
+        return hz.toFixed(2) + " Hz";
+      }
+
+      // Sync Web Audio Oscillator safely
+      function syncAudioFrequency() {
+        if (!audioCtx || !oscillator || !state.isRunning) return;
+        const hz = getFrequencyHz();
+        const maxAudible = (audioCtx.sampleRate || 48000) / 2 - 100;
+        const clampedHz = Math.max(0.1, Math.min(hz, maxAudible));
+
+        oscillator.frequency.setTargetAtTime(clampedHz, audioCtx.currentTime, 0.012);
+
+        // Mute acoustic output gently if set into ultrasonic/MHz range beyond audio hardware Nyquist
+        const effectiveGain = hz <= maxAudible ? state.volume : 0.0001;
+        gainNode.gain.setTargetAtTime(effectiveGain, audioCtx.currentTime, 0.015);
+      }
+
+      // Update UI Readouts and Controls
+      function updateUI(skipInputFocus) {
+        const cfg = UNIT_CONFIG[state.unit];
+        state.freqInUnit = Math.max(cfg.min, Math.min(cfg.max, state.freqInUnit));
+
+        const formatted = formatNumber(state.freqInUnit);
+        const hz = getFrequencyHz();
+
+        freqReadout.textContent = formatted;
+        unitReadout.textContent = state.unit;
+        inputUnitTag.textContent = state.unit;
+        rawHzReadout.textContent = formatRawHz(hz);
+        periodReadout.textContent = formatPeriod(hz);
+
+        if (!skipInputFocus || document.activeElement !== freqInput) {
+          freqInput.value = formatted;
+        }
+
+        freqSlider.min = cfg.min;
+        freqSlider.max = cfg.max;
+        freqSlider.step = state.step < 1 ? state.step : 0.1;
+        freqSlider.value = state.freqInUnit;
+
+        unitButtons.forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.unit === state.unit);
+        });
+
+        stepPills.forEach((pill) => {
+          pill.classList.toggle("active", parseFloat(pill.dataset.step) === state.step);
+        });
+
+        btnStart.disabled = state.isRunning;
+        btnStop.disabled = !state.isRunning;
+        statusBadge.classList.toggle("running", state.isRunning);
+
+        const maxNyquist = audioCtx ? audioCtx.sampleRate / 2 : 24000;
+        if (state.isRunning) {
+          statusText.textContent = hz > maxNyquist ? "Running (RF Sim)" : "Generating";
+        } else {
+          statusText.textContent = "Stopped";
+        }
+
+        syncAudioFrequency();
+      }
+
+      // Start Generator
+      function startGenerator() {
+        if (state.isRunning) return;
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!audioCtx && AudioContextClass) {
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx && audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+
+        if (audioCtx) {
+          oscillator = audioCtx.createOscillator();
+          gainNode = audioCtx.createGain();
+
+          oscillator.type = state.waveform;
+          const hz = getFrequencyHz();
+          const maxAudible = audioCtx.sampleRate / 2 - 100;
+          oscillator.frequency.setValueAtTime(
+            Math.max(0.1, Math.min(hz, maxAudible)),
+            audioCtx.currentTime
+          );
+
+          gainNode.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+          const targetGain = hz <= maxAudible ? state.volume : 0.0001;
+          gainNode.gain.exponentialRampToValueAtTime(
+            Math.max(0.0001, targetGain),
+            audioCtx.currentTime + 0.03
+          );
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          oscillator.start();
+        }
+
+        state.isRunning = true;
+        updateUI();
+      }
+
+      // Stop Generator
+      function stopGenerator() {
+        if (!state.isRunning) return;
+
+        if (audioCtx && oscillator && gainNode) {
+          const now = audioCtx.currentTime;
+          gainNode.gain.cancelScheduledValues(now);
+          gainNode.gain.setValueAtTime(Math.max(0.0001, gainNode.gain.value), now);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.025);
+
+          const oscToStop = oscillator;
+          setTimeout(() => {
+            try {
+              oscToStop.stop();
+              oscToStop.disconnect();
+            } catch (e) {
+              // Ignore already stopped oscillator
+            }
+          }, 30);
+
+          oscillator = null;
+          gainNode = null;
+        }
+
+        state.isRunning = false;
+        updateUI();
+      }
+
+      // Reset Generator to 440 Hz Default
+      function resetGenerator() {
+        stopGenerator();
+        state.unit = "Hz";
+        state.freqInUnit = DEFAULT_FREQ_HZ;
+        state.step = 10;
+        state.waveform = "sine";
+        state.volume = 0.35;
+        waveSelect.value = "sine";
+        volumeSlider.value = "0.35";
+        updateUI();
+      }
+
+      // Step Frequency Up / Down with Acceleration on Hold
+      function stepFrequency(direction, multiplier) {
+        const cfg = UNIT_CONFIG[state.unit];
+        const delta = direction * state.step * (multiplier || 1);
+        const next = Math.round((state.freqInUnit + delta) * 10000) / 10000;
+        state.freqInUnit = Math.max(cfg.min, Math.min(cfg.max, next));
+        updateUI();
+      }
+
+      function startRapidHold(direction) {
+        stopRapidHold();
+        stepFrequency(direction, 1);
+        holdTicks = 0;
+
+        holdTimeout = setTimeout(() => {
+          holdInterval = setInterval(() => {
+            holdTicks += 1;
+            const accel = holdTicks > 25 ? 10 : holdTicks > 10 ? 4 : 1;
+            stepFrequency(direction, accel);
+          }, 55);
+        }, 260);
+      }
+
+      function stopRapidHold() {
+        if (holdTimeout) {
+          clearTimeout(holdTimeout);
+          holdTimeout = null;
+        }
+        if (holdInterval) {
+          clearInterval(holdInterval);
+          holdInterval = null;
+        }
+      }
+
+      // Attach Rapid Hold Events to + and - Buttons
+      function bindHoldButton(button, direction) {
+        button.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0 && e.pointerType === "mouse") return;
+          e.preventDefault();
+          startRapidHold(direction);
+        });
+        button.addEventListener("pointerup", stopRapidHold);
+        button.addEventListener("pointerleave", stopRapidHold);
+        button.addEventListener("pointercancel", stopRapidHold);
+      }
+
+      bindHoldButton(btnDecrement, -1);
+      bindHoldButton(btnIncrement, 1);
+
+      // Direct Input Handler
+      freqInput.addEventListener("input", () => {
+        const parsed = parseFloat(freqInput.value);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          const cfg = UNIT_CONFIG[state.unit];
+          state.freqInUnit = Math.max(cfg.min, Math.min(cfg.max, parsed));
+          updateUI(true);
+        }
+      });
+
+      freqInput.addEventListener("change", () => {
+        const parsed = parseFloat(freqInput.value);
+        const cfg = UNIT_CONFIG[state.unit];
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          state.freqInUnit = cfg.min;
+        } else {
+          state.freqInUnit = Math.max(cfg.min, Math.min(cfg.max, parsed));
+        }
+        updateUI(false);
+      });
+
+      // Sweep Slider Handler
+      freqSlider.addEventListener("input", () => {
+        const val = parseFloat(freqSlider.value);
+        if (Number.isFinite(val)) {
+          state.freqInUnit = val;
+          updateUI();
+        }
+      });
+
+      // Unit Switcher (Hz / kHz / MHz)
+      unitButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const newUnit = btn.dataset.unit;
+          if (newUnit === state.unit) return;
+
+          // Convert current frequency smoothly or clamp into target unit bounds
+          const currentHz = getFrequencyHz();
+          const targetCfg = UNIT_CONFIG[newUnit];
+          const converted = currentHz / targetCfg.factor;
+
+          state.unit = newUnit;
+          if (converted >= targetCfg.min && converted <= targetCfg.max) {
+            state.freqInUnit = Math.round(converted * 1000) / 1000;
+          } else {
+            state.freqInUnit = newUnit === "Hz" ? 440 : 1;
+          }
+          state.step = targetCfg.defaultStep;
+          updateUI();
+        });
+      });
+
+      // Step Size Selector
+      stepPills.forEach((pill) => {
+        pill.addEventListener("click", () => {
+          state.step = parseFloat(pill.dataset.step);
+          updateUI();
+        });
+      });
+
+      // Waveform & Volume Controls
+      waveSelect.addEventListener("change", () => {
+        state.waveform = waveSelect.value;
+        if (oscillator) {
+          oscillator.type = state.waveform;
+        }
+      });
+
+      volumeSlider.addEventListener("input", () => {
+        state.volume = parseFloat(volumeSlider.value);
+        syncAudioFrequency();
+      });
+
+      // Start, Stop, Reset Buttons
+      btnStart.addEventListener("click", startGenerator);
+      btnStop.addEventListener("click", stopGenerator);
+      btnReset.addEventListener("click", resetGenerator);
+
+      // Keyboard Shortcuts
+      window.addEventListener("keydown", (e) => {
+        if (document.activeElement === freqInput) {
+          if (e.key === "Enter") {
+            freqInput.blur();
+          }
+          return;
+        }
+        if (e.code === "Space") {
+          e.preventDefault();
+          state.isRunning ? stopGenerator() : startGenerator();
+        } else if (e.key === "ArrowUp" || e.key === "+") {
+          e.preventDefault();
+          stepFrequency(1, 1);
+        } else if (e.key === "ArrowDown" || e.key === "-") {
+          e.preventDefault();
+          stepFrequency(-1, 1);
+        } else if (e.key === "r" || e.key === "R") {
+          e.preventDefault();
+          resetGenerator();
+        }
+      });
+
+      // Lightweight Live Waveform Canvas Animation
+      let phase = 0;
+      function resizeCanvas() {
+        const rect = waveCanvas.parentElement.getBoundingClientRect();
+        waveCanvas.width = rect.width * (window.devicePixelRatio || 1);
+        waveCanvas.height = rect.height * (window.devicePixelRatio || 1);
+      }
+
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+      function sampleWave(type, t) {
+        const norm = ((t % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        if (type === "square") return norm < Math.PI ? 1 : -1;
+        if (type === "sawtooth") return norm / Math.PI - 1;
+        if (type === "triangle") {
+          return norm < Math.PI
+            ? -1 + (2 / Math.PI) * norm
+            : 3 - (2 / Math.PI) * norm;
+        }
+        return Math.sin(norm);
+      }
+
+      function renderWave() {
+        const w = waveCanvas.width;
+        const h = waveCanvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        const hz = getFrequencyHz();
+        // Logarithmic visual cycles so Hz, kHz, and MHz remain visually distinct and smooth
+        const cycles = Math.max(1.5, Math.min(18, 1.5 + Math.log10(Math.max(1, hz)) * 2.2));
+        const amp = state.isRunning ? h * 0.34 * (0.25 + state.volume * 0.75) : h * 0.08;
+
+        ctx.beginPath();
+        ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
+        ctx.strokeStyle = state.isRunning ? "#10b981" : "#3b82f6";
+
+        for (let x = 0; x <= w; x += 2) {
+          const t = (x / w) * cycles * Math.PI * 2 + phase;
+          const y = h / 2 - sampleWave(state.waveform, t) * amp;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        if (state.isRunning) {
+          phase += 0.04 + Math.min(0.22, Math.log10(Math.max(1, hz)) * 0.03);
+        }
+        requestAnimationFrame(renderWave);
+      }
+
+      updateUI();
+      requestAnimationFrame(renderWave);
+    })();
+  </script>
+</body>
+</html>

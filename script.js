@@ -1,7 +1,7 @@
 const projects=[
  {title:"Osho Talks",desc:"A quiet collection of timeless talks worth discovering.",cat:"Podcasts",className:"wiki",font:"serif",fg:"#111",href:"./osho_talks/"},
  {title:"CONTINENTAL NETWORK",subtitle:"MINDUSTRY · 3 Dedicated Servers",desc:"Multiplayer Survival, Tower Defence, and Attack worlds. Build, defend, and conquer together.",cat:"Game",className:"mindustry",font:"bold",fg:"#f5ede3",href:"zootopia.html"},
- {title:"Sandboxels",desc:"A playful sandbox where everything interacts with everything.",cat:"Sandbox",className:"sandbox",font:"mono",fg:"#fff",href:"#"},
+ {title:"Frequency Generator",desc:"A playful sandbox where everything interacts with everything.",cat:"Sandbox",className:"sandbox",font:"mono",fg:"#fff",href:"assets/frequency_generator.html"},
  {title:"Manhwa",desc:"Read manhwa and discover new stories.",cat:"Creative",className:"constellation",font:"sans",fg:"#fff",href:"/manwa/"},
  {title:"Size of Life",desc:"Explore a strange journey through the scales of the world.",cat:"Experiment",className:"life",font:"serif",fg:"#111",href:"#"},
  {title:"I'm Not a Robot",desc:"A suspiciously simple test of whether you are, in fact, human.",cat:"Puzzle",className:"robot",font:"bold",fg:"#111",href:"#"},

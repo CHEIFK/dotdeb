@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rapid Frequency Generator</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card: #181b22;
+      --border: #272c38;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --success: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 1.5rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .status-dot.active {
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+
+    .display {
+      text-align: center;
+      padding: 1.25rem 0.5rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+
+    .freq-value {
+      font-size: 2.75rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .freq-unit {
+      font-size: 1.1rem;
+      color: var(--accent);
+      font-weight: 600;
+      margin-left: 0.25rem;
+    }
+
+    .audio-note {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.4rem;
+      min-height: 1rem;
+    }
+
+    .stepper-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 60px;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: #20242e;
+      color: var(--text);
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.15s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    button:hover:not(:disabled) {
+      background: #2a303d;
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .step-btn {
+      height: 52px;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .input-group {
+      display: flex;
+      height: 52px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .input-group:focus-within {
+      border-color: var(--accent);
+    }
+
+    .input-group input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 1.05rem;
+      padding: 0 0.75rem;
+      outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .input-group select {
+      background: #20242e;
+      color: var(--muted);
+      border: none;
+      border-left: 1px solid var(--border);
+      padding: 0 0.6rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .controls button {
+      height: 46px;
+    }
+
+    .btn-start {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn-start:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-stop {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: #fff;
+    }
+
+    .btn-stop:hover:not(:disabled) {
+      background: var(--danger-hover);
+    }
+
+    .advance-mode-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .advance-mode-btn:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <a href="frequency_generator.html" class="advance-mode-btn">Advance Mode</a>
+
+  <main class="card">
+    <div class="header">
+      <span>Frequency Generator</span>
+      <span id="statusDot" class="status-dot" title="Output Status"></span>
+    </div>
+
+    <div class="display">
+      <div>
+        <span id="displayVal" class="freq-value">440.00</span>
+        <span id="displayUnit" class="freq-unit">Hz</span>
+      </div>
+      <div id="audioNote" class="audio-note">Ready</div>
+    </div>
+
+    <div class="stepper-row">
+      <button id="decBtn" class="step-btn" aria-label="Decrease frequency">&minus;</button>
+
+      <div class="input-group">
+        <input id="freqInput" type="number" min="0.1" step="any" value="440" aria-label="Direct frequency input" />
+        <select id="unitSelect" aria-label="Input unit">
+          <option value="1">Hz</option>
+          <option value="1000">kHz</option>
+          <option value="1000000">MHz</option>
+        </select>
+      </div>
+
+      <button id="incBtn" class="step-btn" aria-label="Increase frequency">+</button>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn" class="btn-start">Start</button>
+      <button id="stopBtn" class="btn-stop" disabled>Stop</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+  </main>
+
+  <script>
+    const DEFAULT_FREQ = 440;
+    const MIN_FREQ = 1;
+    const MAX_FREQ = 10_000_000; // 10 MHz visual/clock range
+    const MAX_AUDIO_FREQ = 22_050; // Standard Web Audio Nyquist limit
+
+    let currentHz = DEFAULT_FREQ;
+    let audioCtx = null;
+    let oscillator = null;
+    let gainNode = null;
+    let isPlaying = false;
+    let holdTimer = null;
+    let holdInterval = null;
+
+    const displayVal = document.getElementById('displayVal');
+    const displayUnit = document.getElementById('displayUnit');
+    const audioNote = document.getElementById('audioNote');
+    const statusDot = document.getElementById('statusDot');
+    const freqInput = document.getElementById('freqInput');
+    const unitSelect = document.getElementById('unitSelect');
+    const decBtn = document.getElementById('decBtn');
+    const incBtn = document.getElementById('incBtn');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function formatFrequency(hz) {
+      if (hz >= 1_000_000) {
+        return { val: (hz / 1_000_000).toFixed(3), unit: 'MHz' };
+      }
+      if (hz >= 1_000) {
+        return { val: (hz / 1_000).toFixed(2), unit: 'kHz' };
+      }
+      return { val: hz.toFixed(hz < 100 ? 2 : 1), unit: 'Hz' };
+    }
+
+    function getAdaptiveStep(hz) {
+      if (hz >= 1_000_000) return 10_000;
+      if (hz >= 100_000) return 1_000;
+      if (hz >= 10_000) return 100;
+      if (hz >= 1_000) return 10;
+      return 1;
+    }
+
+    function updateUI(syncInput = true) {
+      const { val, unit } = formatFrequency(currentHz);
+      displayVal.textContent = val;
+      displayUnit.textContent = unit;
+
+      if (syncInput) {
+        const multiplier = Number(unitSelect.value);
+        freqInput.value = Number((currentHz / multiplier).toPrecision(7));
+      }
+
+      if (isPlaying) {
+        audioNote.textContent = currentHz > MAX_AUDIO_FREQ
+          ? 'Ultrasonic / RF range (Audio muted > 22 kHz)'
+          : 'Generating sine wave';
+      } else {
+        audioNote.textContent = 'Stopped';
+      }
+    }
+
+    function updateAudio() {
+      if (!isPlaying || !audioCtx || !oscillator || !gainNode) return;
+      const now = audioCtx.currentTime;
+
+      if (currentHz <= MAX_AUDIO_FREQ) {
+        oscillator.frequency.setTargetAtTime(currentHz, now, 0.015);
+        gainNode.gain.setTargetAtTime(0.2, now, 0.02);
+      } else {
+        gainNode.gain.setTargetAtTime(0, now, 0.02);
+      }
+    }
+
+    function setFrequency(newHz, syncInput = true) {
+      currentHz = Math.min(MAX_FREQ, Math.max(MIN_FREQ, newHz));
+      updateUI(syncInput);
+      updateAudio();
+    }
+
+    function startGenerator() {
+      if (isPlaying) return;
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      oscillator = audioCtx.createOscillator();
+      gainNode = audioCtx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.value = Math.min(currentHz, MAX_AUDIO_FREQ);
+      gainNode.gain.value = 0;
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+
+      isPlaying = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      statusDot.classList.add('active');
+
+      updateAudio();
+      updateUI(false);
+    }
+
+    function stopGenerator() {
+      if (!isPlaying) return;
+      const now = audioCtx.currentTime;
+      gainNode.gain.setTargetAtTime(0, now, 0.015);
+
+      const oscToStop = oscillator;
+      setTimeout(() => {
+        oscToStop.stop();
+        oscToStop.disconnect();
+      }, 50);
+
+      isPlaying = false;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      statusDot.classList.remove('active');
+      updateUI(false);
+    }
+
+    function resetGenerator() {
+      stopGenerator();
+      unitSelect.value = '1';
+      setFrequency(DEFAULT_FREQ, true);
+      audioNote.textContent = 'Ready';
+    }
+
+    function bindRapidButton(btn, direction) {
+      const stepOnce = (multiplier = 1) => {
+        const step = getAdaptiveStep(currentHz) * multiplier * direction;
+        setFrequency(currentHz + step);
+      };
+
+      const clearTimers = () => {
+        clearTimeout(holdTimer);
+        clearInterval(holdInterval);
+      };
+
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        stepOnce(1);
+        let ticks = 0;
+        holdTimer = setTimeout(() => {
+          holdInterval = setInterval(() => {
+            ticks++;
+            const accel = ticks > 25 ? 10 : ticks > 10 ? 3 : 1;
+            stepOnce(accel);
+          }, 45);
+        }, 300);
+      });
+
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach((evt) => {
+        btn.addEventListener(evt, clearTimers);
+      });
+    }
+
+    bindRapidButton(incBtn, 1);
+    bindRapidButton(decBtn, -1);
+
+    freqInput.addEventListener('input', () => {
+      const raw = parseFloat(freqInput.value);
+      if (!Number.isNaN(raw) && raw > 0) {
+        setFrequency(raw * Number(unitSelect.value), false);
+      }
+    });
+
+    unitSelect.addEventListener('change', () => {
+      updateUI(true);
+    });
+
+    startBtn.addEventListener('click', startGenerator);
+    stopBtn.addEventListener('click', stopGenerator);
+    resetBtn.addEventListener('click', resetGenerator);
+
+    updateUI(true);
+    audioNote.textContent = 'Ready';
+  </script>
+</body>
+</html>
+
